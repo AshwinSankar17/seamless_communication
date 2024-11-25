@@ -251,8 +251,49 @@ def init_parser() -> argparse.ArgumentParser:
             "downloading restricted datasets such as GigaSpeech."
         ),
     )
+
+    parser.add_argument(
+        "--collate",
+        action="store_true",
+        help="Flag to collate all JSON files in the save directory into a single JSON file.",
+    )
     
     return parser
+
+def collate_json_files(directory: Path, output_file: Path) -> None:
+    """
+    Recursively search for `.jsonl` files in the given directory and concatenate their contents.
+
+    Args:
+        directory (Path): The root directory to search for `.jsonl` files.
+        output_file (Path): The file where the concatenated results will be saved as a `.jsonl`.
+    """
+    jsonl_files = list(directory.rglob("*.json"))
+    combined_data = []
+
+    print(f"Found {len(jsonl_files)} JSONL files in {directory} for collation.")
+
+    for jsonl_file in jsonl_files:
+        try:
+            with open(jsonl_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:  # Ignore empty lines
+                        try:
+                            data = json.loads(line)
+                            combined_data.append(data)
+                        except json.JSONDecodeError as e:
+                            print(f"Error parsing line in {jsonl_file}: {e}")
+        except Exception as e:
+            print(f"Error reading {jsonl_file}: {e}")
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for record in combined_data:
+            json.dump(record, f, ensure_ascii=False)
+            f.write("\n")  # Write each record as a new line in the output file
+
+    print(f"Collated JSONL data saved to {output_file}.")
+
 
 
 def main() -> None:
@@ -288,6 +329,10 @@ def main() -> None:
         download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir)
     else:
         raise ValueError(f"Unhandled dataset: {args.name}")
+    
+    if args.collate:
+        collate_output_file = args.save_dir / "collated_train_manifest.json"
+        collate_json_files(Path(args.save_dir), Path(collate_output_file))
 
 if __name__ == "__main__":
     main()
