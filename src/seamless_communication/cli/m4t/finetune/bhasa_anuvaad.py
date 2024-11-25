@@ -27,7 +27,7 @@ logger = logging.getLogger("dataset")
 
 SUPPORTED_DATASETS = [
     "Mann-ki-Baat", "WordProject", "NPTEL", 
-    "UGCE-Resources", "Vanipedia", "Spoken-Tutorial"
+    "UGCE-Resources", "Vanipedia", "Spoken-Tutorial", "all"
 ]
 
 def rename_columns(dataset, col_map):
@@ -54,6 +54,7 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
         "ur_text": "urd"
     }
     ds = load_dataset(dataset, "en2indic", token=huggingface_token).rename_column("chunked_audio_filepath", "audio")
+    os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
     if col_map is not None:
         ds = rename_columns(ds, col_map)
     for split in ds:
@@ -64,7 +65,8 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
                 if filter_fn(sample):
                     filename = os.path.basename(sample['audio']['path']).split(".")[0]
                     save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
-                    sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
+                    if not os.path.exists(save_filepath):
+                        sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
                     for column, lang_code in columns.items():
                         if column in sample and sample[column]:
                             f.write(json.dumps({
@@ -93,8 +95,8 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         "kannada": "kan",
         "malayalam": "mal",
         "marathi": "mar",
-        "manipuri": "mni"
-        "nepali": "npi"
+        "manipuri": "mni",
+        "nepali": "npi",
         "odia": "ory",
         "punjabi": "pan",
         "tamil": "tam",
@@ -102,30 +104,43 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         "urdu": "urd",
     }
     ds = load_dataset(dataset, "indic2en", token=huggingface_token).rename_column("chunked_audio_filepath", "audio")
+    os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
     for split in ds:
         manifest_path = os.path.join(save_directory, f"{subset}/train_manifest.json")
         logger.info(f"Preparing {split} split...")
         with open(manifest_path, "w") as f:
+            # ds_iterator = iter(ds[split])
+            # pbar = tqdm(total=len(ds[split]))
             for sample in tqdm(ds[split]):
-                if filter_fn(sample):
-                    filename = os.path.basename(sample['audio']['path']).split(".")[0]
-                    save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
-                    sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
-                    f.write(json.dumps({
-                    "source": {
-                        "id": f"segment_{filename}",
-                        "text": sample["text"],
-                        "lang": splits[split],
-                        "audio_local_path": save_filepath,
-                        "sampling_rate": sample["audio"]["sampling_rate"],
-                    },
-                    "target": {
-                        "id": f"segment_{filename}",
-                        "text": sample["en_text"],
-                        "lang": "eng",
-                    }
-                    }) + "\n")
-        logger.info(f"Manifest for {dataset}-eng2indic saved to: {manifest_path}")
+            # for idx in range(len(ds[split])):
+                try:
+                    # sample = next(ds_iterator)
+                    if filter_fn(sample):
+                        filename = os.path.basename(sample['audio']['path']).split(".")[0]
+                        save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                        if not os.path.exists(save_filepath):
+                            sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
+                        f.write(json.dumps({
+                        "source": {
+                            "id": f"segment_{filename}",
+                            "text": sample["text"],
+                            "lang": splits[split],
+                            "audio_local_path": save_filepath,
+                            "sampling_rate": sample["audio"]["sampling_rate"],
+                        },
+                        "target": {
+                            "id": f"segment_{filename}",
+                            "text": sample["en_text"],
+                            "lang": "eng",
+                        }
+                        }) + "\n")
+                        # pbar.update(1)
+                except:
+                    logging.error(f"Skipping index {idx} due to Unhandled error.")
+                    # pbar.update(1)
+                    continue
+    # pbar.close()
+    logger.info(f"Manifest for {dataset}-eng2indic saved to: {manifest_path}")
 
 def download_mkb(subset: str, huggingface_token: str, save_directory: str):
     os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
@@ -225,7 +240,7 @@ def init_parser() -> argparse.ArgumentParser:
         "--direction",
         type=str,
         required=True,
-        choices=["indic2en", "en2indic"],  # Use 'choices' for validation.
+        choices=["indic2en", "en2indic", "all"],  # Use 'choices' for validation.
         help=(
             "Translation direction for the dataset preparation:\n"
             "  - 'indic2en': Indic language to English.\n"
