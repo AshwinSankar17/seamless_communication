@@ -1,3 +1,4 @@
+import typing
 import argparse
 import dataclasses
 import json
@@ -34,7 +35,7 @@ def rename_columns(dataset, col_map):
         dataset = dataset.rename_column(key, value)
     return dataset
 
-def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_directory: str, col_map: dict = None):
+def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_directory: str, col_map: dict = None, filter_fn: typing.Callable = lambda x: True):
     subset = "en2indic"
     columns = {
         "as_text": "asm",
@@ -60,28 +61,29 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
         logger.info(f"Preparing {split} split...")
         with open(manifest_path, "w") as f:
             for sample in tqdm(ds[split]):
-                filename = os.path.basename(sample['audio']['path']).split(".")[0]
-                save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
-                sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
-                for column, lang_code in columns.items():
-                    if column in sample and sample[column]:
-                        f.write(json.dumps({
-                        "source": {
-                            "id": f"segment_{filename}",
-                            "text": sample["text"],
-                            "lang":"eng",
-                            "audio_local_path": save_filepath,
-                            "sampling_rate": sample["audio"]["sampling_rate"],
-                        },
-                        "target": {
-                            "id": f"segment_{filename}",
-                            "text": sample[column],
-                            "lang": lang_code,
-                        }
-                        }) + "\n")
+                if filter_fn(sample):
+                    filename = os.path.basename(sample['audio']['path']).split(".")[0]
+                    save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                    sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
+                    for column, lang_code in columns.items():
+                        if column in sample and sample[column]:
+                            f.write(json.dumps({
+                            "source": {
+                                "id": f"segment_{filename}",
+                                "text": sample["text"],
+                                "lang":"eng",
+                                "audio_local_path": save_filepath,
+                                "sampling_rate": sample["audio"]["sampling_rate"],
+                            },
+                            "target": {
+                                "id": f"segment_{filename}",
+                                "text": sample[column],
+                                "lang": lang_code,
+                            }
+                            }) + "\n")
         logger.info(f"Manifest for {dataset}-eng2indic saved to: {manifest_path}")
 
-def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_directory: str):
+def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_directory: str, filter_fn: typing.Callable = lambda x: True):
     subset = "en2indic"
     splits = {
         "assamese": "asm",
@@ -105,23 +107,24 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         logger.info(f"Preparing {split} split...")
         with open(manifest_path, "w") as f:
             for sample in tqdm(ds[split]):
-                filename = os.path.basename(sample['audio']['path']).split(".")[0]
-                save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
-                sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
-                f.write(json.dumps({
-                "source": {
-                    "id": f"segment_{filename}",
-                    "text": sample["text"],
-                    "lang": splits[split],
-                    "audio_local_path": save_filepath,
-                    "sampling_rate": sample["audio"]["sampling_rate"],
-                },
-                "target": {
-                    "id": f"segment_{filename}",
-                    "text": sample["en_text"],
-                    "lang": "eng",
-                }
-                }) + "\n")
+                if filter_fn(sample):
+                    filename = os.path.basename(sample['audio']['path']).split(".")[0]
+                    save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                    sf.write(save_filepath, sample['audio']["array"], samplerate=sample['audio']["sampling_rate"])
+                    f.write(json.dumps({
+                    "source": {
+                        "id": f"segment_{filename}",
+                        "text": sample["text"],
+                        "lang": splits[split],
+                        "audio_local_path": save_filepath,
+                        "sampling_rate": sample["audio"]["sampling_rate"],
+                    },
+                    "target": {
+                        "id": f"segment_{filename}",
+                        "text": sample["en_text"],
+                        "lang": "eng",
+                    }
+                    }) + "\n")
         logger.info(f"Manifest for {dataset}-eng2indic saved to: {manifest_path}")
 
 def download_mkb(subset: str, huggingface_token: str, save_directory: str):
