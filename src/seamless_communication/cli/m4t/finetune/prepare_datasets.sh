@@ -3,5 +3,5 @@ python bhasa_anuvaad.py \
 --direction "all" \
 --save_dir "/data/BhasaAnuvaad" \
 --hf_cache_dir "/data/huggingface/datasets/BhasaAnuvaad" \
---huggingface_token "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" \
+--huggingface_token "" \
 --collate
