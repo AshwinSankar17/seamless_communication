@@ -1,0 +1,16 @@
+CUDA_VISIBLE_DEVICES=0 torchrun --nnodes=1 \
+--nproc_per_node=1 \
+--rdzv_id=100 \
+--rdzv_backend=c10d \
+--rdzv_endpoint=localhost:29400 finetune.py \
+--train_dataset /data/BhasaAnuvaad/collated_train_manifest.json \
+--eval_dataset /data/BhasaAnuvaad/collated_val_manifest.json \
+--model_name seamlessM4T_v2_large \
+--save_model_to /root/repos/seamless_communication/checkpoints/pilot \
+--max_epochs 10 \
+--learning_rate 2e-6 \
+--warmup_steps 1000 \
+--max_src_tokens 500 \
+--eval_steps 1000 \
+--log_steps 100 \
+--mode SPEECH_TO_TEXT
