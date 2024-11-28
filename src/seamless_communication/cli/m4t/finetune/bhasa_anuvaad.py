@@ -56,14 +56,14 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
         "ur_text": "urd"
     }
     ds = load_dataset(dataset, "en2indic", token=huggingface_token, cache_dir=hf_cache_dir).rename_column("chunked_audio_filepath", "audio")
-    os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
-    os.makedirs(os.path.join(save_directory, f"{subset}/wavs_16k"), exist_ok=True)
     error_log = open("error.log", "w")
     if col_map is not None:
         ds = rename_columns(ds, col_map)
     manifest_path = os.path.join(save_directory, f"{subset}/train_manifest.json")
     with open(manifest_path, "w") as f:
         for split in ds:
+            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs"), exist_ok=True)
+            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs_16k"), exist_ok=True)
             ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
             # for idx, sample in tqdm(enumerate(ds[split])):
@@ -72,12 +72,12 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
                     sample = next(ds_iterator)
                     if filter_fn(sample):
                         filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
-                        save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                        save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
                         if not os.path.exists(save_filepath):
                             audio = librosa.resample(sample['audio']['array'], orig_sr=sample['audio']["sampling_rate"], target_sr=16_000)
-                            save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                            save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
                             sf.write(save_filepath, sample['audio']['array'], samplerate=sample['audio']['sampling_rate'])
-                            save_filepath = f"{save_directory}/{subset}/wavs_16k/{filename}.wav"
+                            save_filepath = f"{save_directory}/{subset}/{split}/wavs_16k/{filename}.wav"
                             sf.write(save_filepath, audio, samplerate=16_000)
                         try:
                             ta.load(save_filepath)
@@ -112,7 +112,7 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
     logger.info(f"Manifest for {dataset}-eng2indic saved to: {manifest_path}")
 
 def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_directory: str, hf_cache_dir: str = "~/.cache/huggingface/datasets", filter_fn: typing.Callable = lambda x: True):
-    subset = "en2indic"
+    subset = "indic2en"
     splits = {
         "assamese": "asm",
         "bengali": "ben",
@@ -130,12 +130,12 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         "urdu": "urd",
     }
     ds = load_dataset(dataset, "indic2en", token=huggingface_token, cache_dir=hf_cache_dir).rename_column("chunked_audio_filepath", "audio")
-    os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
-    os.makedirs(os.path.join(save_directory, f"{subset}/wavs_16k"), exist_ok=True)
     error_log = open("error.log", "w")
     manifest_path = os.path.join(save_directory, f"{subset}/train_manifest.json")
     with open(manifest_path, "w") as f:
         for split in ds:
+            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs"), exist_ok=True)
+            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs_16k"), exist_ok=True)
             logger.info(f"Preparing {split} split...")
             ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
@@ -145,12 +145,11 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
                     sample = next(ds_iterator)
                     if filter_fn(sample):
                         filename = os.path.basename(sample['audio']['path']).replace(".", "")
-                        save_filepath = f"{save_directory}/{subset}/wavs/{filename}.wav"
+                        save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
                         if not os.path.exists(save_filepath):
-                            # librosa.output.write_wav(save_filepath, audio, 16_000)
                             sf.write(save_filepath, sample['audio']['array'], samplerate=sample['audio']['sampling_rate'])
                             audio = librosa.resample(sample['audio']['array'], orig_sr=sample['audio']["sampling_rate"], target_sr=16_000)
-                            save_filepath = f"{save_directory}/{subset}/wavs_16k/{filename}.wav"
+                            save_filepath = f"{save_directory}/{subset}/{split}/wavs_16k/{filename}.wav"
                             sf.write(save_filepath, audio, samplerate=16_000)
                         try:
                             ta.load(save_filepath)
