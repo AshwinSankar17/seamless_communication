@@ -37,7 +37,20 @@ def rename_columns(dataset, col_map):
         dataset = dataset.rename_column(key, value)
     return dataset
 
-def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_directory: str, hf_cache_dir: str = "~/.cache/huggingface/datasets", col_map: dict = None, filter_fn: typing.Callable = lambda x: True):
+def clean_text(text):
+    if text is not None:
+        text = re.sub(r"\(.*?\)", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def _dispatch_prepare_en2indic(
+    dataset: str, 
+    huggingface_token: str, 
+    save_directory: str, 
+    hf_cache_dir: str = "~/.cache/huggingface/datasets", 
+    col_map: dict = None, 
+    filter_fn: typing.Callable = lambda x: True
+):
     subset = "en2indic"
     columns = {
         "as_text": "asm",
@@ -56,45 +69,46 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
         "ur_text": "urd"
     }
     ds = load_dataset(dataset, "en2indic", token=huggingface_token, cache_dir=hf_cache_dir).rename_column("chunked_audio_filepath", "audio")
-    error_log = open("error.log", "w")
+    ds_str = dataset.replace("ai4bharat/", "")
+    error_log = open("error.log", "a")
+    # Remap column names
     if col_map is not None:
         ds = rename_columns(ds, col_map)
-    manifest_path = os.path.join(save_directory, f"{subset}/train_manifest.json")
-    with open(manifest_path, "w") as f:
-        for split in ds:
-            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs"), exist_ok=True)
-            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs_16k"), exist_ok=True)
+    # Process split
+    for split in ds:
+        os.makedirs(os.path.join(save_directory, f"{ds_str}/{subset}/english/wavs"), exist_ok=True)
+        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/english/train_manifest.json")
+
+        with open(manifest_path, "w") as f:
+            logger.info(f"Preparing English split...")
             ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
-            # for idx, sample in tqdm(enumerate(ds[split])):
             for idx in range(len(ds[split])):
                 try:
                     sample = next(ds_iterator)
                     if filter_fn(sample):
-                        filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
-                        save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
+                        if "audio_filepath" in sample:
+                            audio_fp = os.path.basename(sample['audio_filepath']).replace(".wav", "")
+                            filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
+                            filename = f"{audio_fp}_{filename}"
+                        else:
+                            filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
+                        save_filepath = f"{save_directory}/{ds_str}/{subset}/english/wavs/{filename}.wav"
                         if not os.path.exists(save_filepath):
                             audio = librosa.resample(sample['audio']['array'], orig_sr=sample['audio']["sampling_rate"], target_sr=16_000)
-                            save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
-                            sf.write(save_filepath, sample['audio']['array'], samplerate=sample['audio']['sampling_rate'])
-                            save_filepath = f"{save_directory}/{subset}/{split}/wavs_16k/{filename}.wav"
                             sf.write(save_filepath, audio, samplerate=16_000)
-                        try:
-                            ta.load(save_filepath)
-                        except:
-                            # with open("error.log", "wa") as error_log:
-                            error_log.write(f"{filename}\n")
+                        # load to check for decode error
+                        ta.load(save_filepath)
                         for column, lang_code in columns.items():
-                            if column in sample and sample[column]:
-                                tgt_text = re.sub(r"\(.*?\)", "", sample[column])
-                                tgt_text = re.sub(r"\s+", " ", tgt_text).strip()
+                            if sample.get(column):
+                                tgt_text = clean_text(sample[column])
                                 f.write(json.dumps({
                                 "source": {
                                     "id": f"segment_{filename}",
-                                    "text": sample.get("text", None),
+                                    "text": clean_text(sample.get("text", None)),
                                     "lang":"eng",
                                     "audio_local_path": save_filepath,
-                                    "sampling_rate": sample["audio"]["sampling_rate"],
+                                    "sampling_rate": 16_000,
                                 },
                                 "target": {
                                     "id": f"segment_{filename}",
@@ -105,6 +119,7 @@ def _dispatch_prepare_en2indic(dataset: str, huggingface_token: str, save_direct
                                 pbar.update(1)
                 except Exception as e:
                     logging.error(f"Skipping index {idx} due to Unhandled error {e}.")
+                    error_log.write(f"{save_filepath}\n")
                     pbar.update(1)
                     continue
     pbar.close()
@@ -130,12 +145,13 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         "urdu": "urd",
     }
     ds = load_dataset(dataset, "indic2en", token=huggingface_token, cache_dir=hf_cache_dir).rename_column("chunked_audio_filepath", "audio")
-    error_log = open("error.log", "w")
-    manifest_path = os.path.join(save_directory, f"{subset}/train_manifest.json")
-    with open(manifest_path, "w") as f:
-        for split in ds:
-            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs"), exist_ok=True)
-            os.makedirs(os.path.join(save_directory, f"{subset}/{split}/wavs_16k"), exist_ok=True)
+    ds_str = dataset.replace("ai4bharat/", "")
+    error_log = open("error.log", "a")
+    for split in ds:
+        os.makedirs(os.path.join(save_directory, f"{ds_str}/{subset}/{split}/wavs"), exist_ok=True)
+        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/{split}/train_manifest.json")
+        
+        with open(manifest_path, "w") as f:
             logger.info(f"Preparing {split} split...")
             ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
@@ -144,22 +160,24 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
                 try:
                     sample = next(ds_iterator)
                     if filter_fn(sample):
-                        filename = os.path.basename(sample['audio']['path']).replace(".", "")
-                        save_filepath = f"{save_directory}/{subset}/{split}/wavs/{filename}.wav"
+                        if "audio_filepath" in sample:
+                            audio_fp = os.path.basename(sample['audio_filepath']).replace(".wav", "")
+                            filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
+                            filename = f"{audio_fp}_{filename}"
+                        else:
+                            filename = os.path.basename(sample['audio']['path']).replace(".wav", "")
+                        # print(sample['audio']['path'])
+                        save_filepath = f"{save_directory}/{ds_str}/{subset}/{split}/wavs/{filename}.wav"
                         if not os.path.exists(save_filepath):
-                            sf.write(save_filepath, sample['audio']['array'], samplerate=sample['audio']['sampling_rate'])
                             audio = librosa.resample(sample['audio']['array'], orig_sr=sample['audio']["sampling_rate"], target_sr=16_000)
-                            save_filepath = f"{save_directory}/{subset}/{split}/wavs_16k/{filename}.wav"
                             sf.write(save_filepath, audio, samplerate=16_000)
-                        try:
-                            ta.load(save_filepath)
-                        except:
-                            # with open("error.log", "wa") as error_log:
-                            error_log.write(f"{filename}\n")
+                        
+                        ta.load(save_filepath)
+
                         f.write(json.dumps({
                         "source": {
                             "id": f"segment_{filename}",
-                            "text": sample.get("text", None),
+                            "text": clean_text(sample.get("text", None)),
                             "lang": splits[split],
                             "audio_local_path": save_filepath,
                             "sampling_rate": sample["audio"]["sampling_rate"],
@@ -173,6 +191,7 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
                         pbar.update(1)
                 except Exception as e:
                     logging.error(f"Skipping index {idx} due to Unhandled error {e}.")
+                    error_log.write(f"{save_filepath}\n")
                     pbar.update(1)
                     continue
     pbar.close()
