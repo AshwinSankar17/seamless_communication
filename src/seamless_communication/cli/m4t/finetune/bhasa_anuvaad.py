@@ -81,11 +81,12 @@ def _dispatch_prepare_en2indic(
 
         with open(manifest_path, "w") as f:
             logger.info(f"Preparing English split...")
-            ds_iterator = iter(ds[split])
+            # ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
             for idx in range(len(ds[split])):
                 try:
-                    sample = next(ds_iterator)
+                    # sample = next(ds_iterator)
+                    sample = ds[split][idx]
                     if filter_fn(sample):
                         if "audio_filepath" in sample:
                             audio_fp = os.path.basename(sample['audio_filepath']).replace(".wav", "")
@@ -98,7 +99,11 @@ def _dispatch_prepare_en2indic(
                             audio = librosa.resample(sample['audio']['array'], orig_sr=sample['audio']["sampling_rate"], target_sr=16_000)
                             sf.write(save_filepath, audio, samplerate=16_000)
                         # load to check for decode error
-                        ta.load(save_filepath)
+                        audio, sr = ta.load(save_filepath)
+                        if "UGCE" in ds_str:
+                            a_dur = round(audio.shape[-1] / sr, 1)
+                            sample_dur = round(sample['duration'], 1)
+                            assert a_dur == sample_dur, f"{a_dur} vs {sample_dur}" 
                         for column, lang_code in columns.items():
                             if sample.get(column):
                                 tgt_text = clean_text(sample[column])
@@ -158,7 +163,8 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
             # for idx, sample in tqdm(enumerate(ds[split])):
             for idx in range(len(ds[split])):
                 try:
-                    sample = next(ds_iterator)
+                    # sample = next(ds_iterator)
+                    sample = ds[split][idx]
                     if filter_fn(sample):
                         if "audio_filepath" in sample:
                             audio_fp = os.path.basename(sample['audio_filepath']).replace(".wav", "")

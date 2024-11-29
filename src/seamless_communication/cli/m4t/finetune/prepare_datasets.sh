@@ -1,5 +1,5 @@
 python bhasa_anuvaad.py \
---name "NPTEL" \
+--name "UGCE-Resources" \
 --direction "all" \
 --save_dir "/data/BhasaAnuvaad" \
 --hf_cache_dir "/data/huggingface/datasets/BhasaAnuvaad" \
