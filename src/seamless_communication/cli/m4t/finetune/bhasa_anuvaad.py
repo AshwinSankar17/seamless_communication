@@ -10,8 +10,6 @@ import soundfile as sf
 import librosa
 import torchaudio as ta
 
-import torch
-
 from datasets import load_dataset
 # from seamless_communication.datasets.huggingface import (
 #     Speech2SpeechFleursDatasetBuilder,
@@ -121,7 +119,7 @@ def _dispatch_prepare_en2indic(
                                     "lang": lang_code,
                                 }
                                 }) + "\n")
-                                pbar.update(1)
+                        pbar.update(1)
                 except Exception as e:
                     logging.error(f"Skipping index {idx} due to Unhandled error {e}.")
                     error_log.write(f"{save_filepath}\n")
@@ -158,14 +156,13 @@ def _dispatch_prepare_indic2en(dataset: str, huggingface_token: str, save_direct
         
         with open(manifest_path, "w") as f:
             logger.info(f"Preparing {split} split...")
-            ds_iterator = iter(ds[split])
             pbar = tqdm(total=len(ds[split]))
             # for idx, sample in tqdm(enumerate(ds[split])):
             for idx in range(len(ds[split])):
                 try:
                     # sample = next(ds_iterator)
                     sample = ds[split][idx]
-                    if filter_fn(sample):
+                    if filter_fn(sample) and sample['en_text']:
                         if "audio_filepath" in sample:
                             audio_fp = os.path.basename(sample['audio_filepath']).replace(".wav", "")
                             filename = os.path.basename(sample['audio']['path']).replace(".wav", "")

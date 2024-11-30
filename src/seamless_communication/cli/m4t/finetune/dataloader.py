@@ -80,7 +80,7 @@ class BatchingConfig:
     world_size: int = 1
     """The world size of the process group."""
 
-    num_workers: int = 2
+    num_workers: int = 0
     """Parallelism in dataset preparation."""
 
     float_dtype: torch.dtype = torch.float16
@@ -88,7 +88,9 @@ class BatchingConfig:
 
 
 def worker_init_fn(worker_id: int) -> None:
-    np.random.seed(np.random.get_state()[1][0] + worker_id)  # type: ignore
+    # np.random.seed(np.random.get_state()[1][0] + worker_id)  # type: ignore
+    seed = torch.initial_seed() % (2**32)
+    np.random.seed(seed + worker_id)
 
 
 class UnitYDataLoader:
@@ -98,15 +100,17 @@ class UnitYDataLoader:
         self,
         text_tokenizer: NllbTokenizer,
         unit_tokenizer: UnitTokenizer,
-        dataset_manifest_path: str,
+        dataset_manifest_path: str | List[str],
         batching_config: BatchingConfig,
-        max_src_tokens_per_batch: int = 100000
+        max_src_tokens_per_batch: int = 100000,
+        mode="train",
     ):
         self.text_tokenizer = text_tokenizer
         self.text_encoders_per_lang: Dict[str, TextTokenEncoder] = {}
         self.unit_tokenizer = unit_tokenizer
         self.unit_encoders_per_lang: Dict[str, UnitTokenEncoder] = {}
         self.batching_config = batching_config
+        self.mode = mode
         self._fbank_extract_params = {
             "num_mel_bins": 80,
             "waveform_scale": 32768,
@@ -115,6 +119,8 @@ class UnitYDataLoader:
             "device": torch.device("cpu"),
             "dtype": self.batching_config.float_dtype,
         }
+        if isinstance(dataset_manifest_path, str):
+            dataset_manifest_path = [dataset_manifest_path]
         self.dataset = self._load_manifest(dataset_manifest_path)
         self.max_src_tokens_per_batch = max_src_tokens_per_batch
 
@@ -127,7 +133,7 @@ class UnitYDataLoader:
         data_loader = DataLoader(
             dataset=subset,
             batch_size=self.batching_config.batch_size,
-            shuffle=True,
+            shuffle=self.mode == "train",
             num_workers=self.batching_config.num_workers,
             collate_fn=self._prepare_batch,
             worker_init_fn=worker_init_fn,
@@ -192,15 +198,31 @@ class UnitYDataLoader:
             padded_tensors.append(pad_tensor(tensor, padding, "constant", pad_value))
         return torch.stack([tensor for tensor in padded_tensors], dim=0)
 
-    def _is_long_src_audio(self, sample: LangPairSample) -> bool:
+    def _is_long_src_audio_tgt_text(self, sample: Dict[str, Any]) -> bool:
         # HACK:: causes errored audios to be excluded but this is difficult to follow
         try:
+            sample = LangPairSample.from_json(sample)
             wav, sample_rate = torchaudio.load(sample.source.audio_local_path)
             length_s: float = max(wav.shape) / sample_rate
-            return length_s > self.batching_config.max_audio_length_sec
+            tokens = self._get_tokenized_target_text(sample)
+            return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
         except:
             logger.exception(f"Failed to load sample path: {sample.source.audio_local_path}")
-            return True
+            # return True
+            return False
+        
+    # def _is_long_src_audio_tgt_text(self, sample: LangPairSample) -> bool:
+    #     # HACK:: causes errored audios to be excluded but this is difficult to follow
+    #     try:
+    #         sample = LangPairSample.from_json(sample)
+    #         wav, sample_rate = torchaudio.load(sample.source.audio_local_path)
+    #         length_s: float = max(wav.shape) / sample_rate
+    #         tokens = self._get_tokenized_target_text(sample)
+    #         return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
+    #     except:
+    #         logger.exception(f"Failed to load sample path: {sample.source.audio_local_path}")
+    #         # return True
+    #         return False
 
     def _drop_overflow_samples(
         self, samples_with_fbanks: List[Tuple[LangPairSample, torch.Tensor]]
@@ -219,13 +241,13 @@ class UnitYDataLoader:
         samples = [LangPairSample.from_json(sample) for sample in raw_samples]
         # input speech
         
-        #  - filter long audio samples
-        filtered_samples = [
-            sample for sample in samples if not self._is_long_src_audio(sample)
-        ]
-        samples = (
-            filtered_samples if filtered_samples else [samples[0]]
-        )  # keep at least one sample
+        #  - filter long audio samples. Was done as a preprocessing step to not loose batch data
+        # filtered_samples = [
+        #     sample for sample in samples if not self._is_long_src_audio_tgt_text(sample)
+        # ]
+        # samples = (
+        #     filtered_samples if filtered_samples else [samples[0]]
+        # )  # keep at least one sample
         with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
         #  - filter NaNs in fbanks
         filtered = [
@@ -295,8 +317,102 @@ class UnitYDataLoader:
                 target_lengths=units_lengths,
             ),
         )
+    # def _prepare_batch(self, raw_samples: List[Dict[str, Any]]) -> MultimodalSeqsBatch:
+    #     samples = [LangPairSample.from_json(sample) for sample in raw_samples]
+    #     # input speech
+        
+    #     #  - filter long audio samples
+    #     filtered_samples = [
+    #         sample for sample in samples if not self._is_long_src_audio_tgt_text(sample)
+    #     ]
+    #     samples = (
+    #         filtered_samples if filtered_samples else [samples[0]]
+    #     )  # keep at least one sample
+    #     with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
+    #     #  - filter NaNs in fbanks
+    #     filtered = [
+    #         (sample, fbank)
+    #         for sample, fbank in with_fbanks
+    #         if not fbank.isnan().any().item()
+    #     ]
+    #     filtered = self._drop_overflow_samples(filtered)
 
-    def _load_manifest(self, dataset_manifest_path: str) -> Dataset:
-        with open(dataset_manifest_path) as fp_in:
-            dataset = [json.loads(line) for line in fp_in]
-            return Dataset.from_list(dataset)
+    #     samples = [sample for sample, _ in filtered]
+    #     src_tokens_list = [src_tokens for _, src_tokens in filtered]
+    #     assert len(samples) > 0
+    #     src_tokens = self._batch_tensors(
+    #         src_tokens_list, pad_value=self.batching_config.fbank_feats_pad_idx
+    #     ).to(self.batching_config.float_dtype)
+    #     src_lengths = torch.LongTensor(
+    #         [src_tokens.shape[0] for src_tokens in src_tokens_list]
+    #     )
+        
+    #     # output text
+    #     text_tokens_list = [
+    #         self._get_tokenized_target_text(sample) for sample in samples
+    #     ]
+    #     text_pad_idx = self.text_tokenizer.vocab_info.pad_idx
+    #     prev_outputs_tokens = self._batch_tensors(
+    #         [tokens[:-1] for tokens in text_tokens_list], pad_value=text_pad_idx
+    #     )
+    #     target_tokens = self._batch_tensors(
+    #         [tokens[1:] for tokens in text_tokens_list], pad_value=text_pad_idx
+    #     )
+    #     tokens_lengths = torch.LongTensor(
+    #         [tokens.shape[0] - 1 for tokens in text_tokens_list]
+    #     )
+    #     # output units
+    #     units_list_raw = [self._get_tokenized_units(sample) for sample in samples]
+    #     if None in units_list_raw:
+    #         prev_outputs_units = None
+    #         target_units = None
+    #         units_lengths = None
+    #     else:
+    #         units_list: List[Tensor] = [
+    #             value for value in units_list_raw if value is not None
+    #         ]
+    #         units_pad_idx = self.unit_tokenizer.vocab_info.pad_idx
+    #         prev_outputs_units = self._batch_tensors(
+    #             [tokens[:-1] for tokens in units_list], pad_value=units_pad_idx
+    #         )
+    #         target_units = self._batch_tensors(
+    #             [tokens[1:] for tokens in units_list], pad_value=units_pad_idx
+    #         )
+    #         units_lengths = torch.LongTensor(
+    #             [tokens.shape[0] - 1 for tokens in units_list]
+    #         )
+    #     return MultimodalSeqsBatch(
+    #         speech_to_text=SeqsBatch(
+    #             src_tokens=src_tokens,
+    #             src_lengths=src_lengths,
+    #             target_tokens=target_tokens,
+    #             prev_output_tokens=prev_outputs_tokens,
+    #             target_lengths=tokens_lengths,
+    #         ),
+    #         text_to_units=SeqsBatch(
+    #             src_tokens=None,
+    #             src_lengths=None,
+    #             target_tokens=target_units,
+    #             prev_output_tokens=prev_outputs_units,
+    #             target_lengths=units_lengths,
+    #         ),
+    #     )
+
+    def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
+        dataset = []
+        for dataset_manifest_path in dataset_manifest_paths:
+            with open(dataset_manifest_path) as fp_in:
+                dataset.extend([json.loads(line) for line in fp_in])
+        # dataset = list(filter(self.filter_cases, dataset))
+        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=16)
+        return dataset
+
+    # def filter_cases(self, sample: Dict[str, Any]):
+    #     try:
+    #         wav, sample_rate = torchaudio.load(sample['source']['audio_local_path'])
+    #         length_s: float = max(wav.shape) / sample_rate
+    #         tokens = self._get_tokenized_target_text(sample)
+    #         return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
+    #     except:
+    #         logger.exception(f"Failed to load sample path: {sample['source']['audio_local_path']}")
+    #         return False

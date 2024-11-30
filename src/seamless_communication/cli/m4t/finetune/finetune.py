@@ -32,12 +32,14 @@ def init_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--train_dataset",
+        nargs='+',
         type=Path,
         required=True,
         help="Path to manifest with train samples",
     )
     parser.add_argument(
         "--eval_dataset",
+        nargs='+',
         type=Path,
         required=True,
         help="Path to manifest with eval samples",
@@ -63,7 +65,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=5,
+        default=32,
         help="Batch size for training and evaluation",
     )
     parser.add_argument(
@@ -143,7 +145,8 @@ def main() -> None:
     args = init_parser().parse_args()
     
     dist_utils.init_distributed([logger, trainer.logger])
-    float_dtype = torch.float16 if torch.device(args.device).type != "cpu" else torch.bfloat16
+    # float_dtype = torch.float16 if torch.device(args.device).type != "cpu" else torch.bfloat16
+    float_dtype = torch.bfloat16
     
     text_tokenizer = load_unity_text_tokenizer(args.model_name)
     unit_tokenizer = load_unity_unit_tokenizer(args.model_name)
@@ -192,6 +195,7 @@ def main() -> None:
             max_audio_length_sec=15.0,
             float_dtype=finetune_params.float_dtype,
         ),
+        mode="train",
         dataset_manifest_path=args.train_dataset,
         max_src_tokens_per_batch=args.max_src_tokens)
     
@@ -202,9 +206,10 @@ def main() -> None:
             batch_size=finetune_params.eval_batch_size,
             rank=dist_utils.get_rank(),
             world_size=dist_utils.get_world_size(),
-            max_audio_length_sec=75.0,
+            max_audio_length_sec=25.0,
             float_dtype=finetune_params.float_dtype,
         ),
+        mode="test",
         dataset_manifest_path=args.eval_dataset)
     
     finetune = trainer.UnitYFinetune(
