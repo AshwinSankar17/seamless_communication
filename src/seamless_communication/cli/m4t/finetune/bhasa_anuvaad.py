@@ -1,3 +1,4 @@
+import random
 import typing
 import argparse
 import re
@@ -166,7 +167,7 @@ def _dispatch_prepare_en2indic(
     # Process split
     for split in ds:
         os.makedirs(os.path.join(save_directory, f"{ds_str}/{subset}/english/wavs"), exist_ok=True)
-        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/english/train_manifest.json")
+        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/english/manifest.json")
 
         with open(manifest_path, "w") as f:
             logger.info(f"Preparing English split...")
@@ -267,7 +268,7 @@ def _dispatch_prepare_indic2en(
         ds = ds.rename_columns(col_map)
     for split in ds:
         os.makedirs(os.path.join(save_directory, f"{ds_str}/{subset}/{split}/wavs"), exist_ok=True)
-        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/{split}/train_manifest.json")
+        manifest_path = os.path.join(save_directory, f"{ds_str}/{subset}/{split}/manifest.json")
         
         with open(manifest_path, "w") as f:
             logger.info(f"Preparing {split} split...")
@@ -434,6 +435,7 @@ def init_parser() -> argparse.ArgumentParser:
         "--name",
         type=str,
         required=True,
+        choices=SUPPORTED_DATASETS,
         help="HuggingFace name of the dataset to prepare (e.g., 'dataset_name').",
     )
     
@@ -482,60 +484,139 @@ def init_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--collate",
-        action="store_true",
-        help="Flag to collate all JSON files in the save directory into a single JSON file.",
+    "--do_split",
+    action="store_true",
+    help="Enable this flag to split each dataset in the save_directory into train and test sets."
+)
+
+    parser.add_argument(
+        "--test_duration",
+        type=float,
+        required=False,
+        default=3000.0,
+        help="Maximum total duration (in seconds) for the test set. Data points are randomly selected until this threshold is reached."
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        required=False,
+        default=42,
+        help="Random seed for reproducibility of the train-test split. Ensures consistent results across multiple runs."
     )
     
     return parser
 
-def collate_json_files(directory: Path, output_file: Path) -> None:
+
+def calculate_audio_duration(audio_path: str) -> float:
     """
-    Recursively search for `.jsonl` files in the given directory and concatenate their contents.
+    Calculate the duration of an audio file using torchaudio.
 
     Args:
-        directory (Path): The root directory to search for `.jsonl` files.
-        output_file (Path): The file where the concatenated results will be saved as a `.jsonl`.
-    """
-    jsonl_files = list(directory.rglob("*.json"))
-    combined_data = []
+        audio_path (str): Path to the audio file.
 
-    print(f"Found {len(jsonl_files)} JSONL files in {directory} for collation.")
+    Returns:
+        float: Duration of the audio file in seconds.
+    """
+    try:
+        info = ta.info(audio_path)
+        return info.num_samples / info.sample_rate
+    except Exception as e:
+        print(f"Error calculating duration for {audio_path}: {e}")
+        return 0.0
+
+
+def train_test_split_by_duration(data: list, test_duration_threshold: float, seed: int = 42) -> typing.Tuple[typing.List, typing.List]:
+    """
+    Split the dataset into train and test sets by randomly sampling data points for the test set
+    until the test set reaches the specified duration threshold. The split is deterministic if a seed is provided.
+
+    Args:
+        data (list): List of data samples.
+        test_duration_threshold (float): Target total duration for the test set (in seconds).
+        seed (int): Random seed for reproducibility. Default is 42.
+
+    Returns:
+        tuple: (train_set, test_set)
+    """
+    random.seed(seed)  # Set the random seed for reproducibility
+    remaining_data = data[:]  # Copy the original list to avoid modifying it
+    test_set = []
+    test_duration = 0.0
+    offset = 10
+
+    while test_duration < test_duration_threshold and remaining_data:
+        # Randomly select a sample
+        sample = random.choice(remaining_data)
+        audio_path = sample['source']['audio_local_path']
+        duration = calculate_audio_duration(audio_path)
+
+        if (test_duration + duration) <= (test_duration_threshold + offset):
+            test_set.append(sample)
+            test_duration += duration
+            remaining_data.remove(sample)  # Remove the selected sample from the pool
+        else:
+            break
+
+    train_set = remaining_data  # Remaining samples are the train set
+    return train_set, test_set
+
+
+def split_manifest_files(directory: Path, test_duration_threshold: float, seed: int) -> None:
+    """
+    Split each `manifest.json` file in the directory into train and test sets based on a duration threshold.
+    Save the resulting train and test manifests in the same directory as the original manifest.
+
+    Args:
+        directory (Path): The root directory to search for `manifest.json` files.
+        test_duration_threshold (float): Target total duration for the test set (in seconds).
+    """
+    jsonl_files = list(directory.rglob("manifest.json"))
+
+    print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
     for jsonl_file in jsonl_files:
+        print(f"Processing {jsonl_file}...")
         try:
+            # Read and load data from the manifest
             with open(jsonl_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:  # Ignore empty lines
-                        try:
-                            data = json.loads(line)
-                            combined_data.append(data)
-                        except json.JSONDecodeError as e:
-                            print(f"Error parsing line in {jsonl_file}: {e}")
+                data = [json.loads(line.strip()) for line in f if line.strip()]
+
+            print(f"Total samples in {jsonl_file}: {len(data)}")
+
+            # Split into train and test sets
+            train_set, test_set = train_test_split_by_duration(data, test_duration_threshold, seed=seed)
+
+            # Define output file paths
+            output_train_file = jsonl_file.parent / "train_manifest.json"
+            output_test_file = jsonl_file.parent / "test_manifest.json"
+
+            # Save train manifest
+            with open(output_train_file, "w", encoding="utf-8") as f_train:
+                for record in train_set:
+                    json.dump(record, f_train, ensure_ascii=False)
+                    f_train.write("\n")
+
+            # Save test manifest
+            with open(output_test_file, "w", encoding="utf-8") as f_test:
+                for record in test_set:
+                    json.dump(record, f_test, ensure_ascii=False)
+                    f_test.write("\n")
+
+            print(f"Train manifest saved to {output_train_file} with {len(train_set)} samples.")
+            print(f"Test manifest saved to {output_test_file} with {len(test_set)} samples.")
+
         except Exception as e:
-            print(f"Error reading {jsonl_file}: {e}")
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        for record in combined_data:
-            json.dump(record, f, ensure_ascii=False)
-            f.write("\n")  # Write each record as a new line in the output file
-
-    print(f"Collated JSONL data saved to {output_file}.")
-
+            print(f"Error processing {jsonl_file}: {e}")
 
 
 def main() -> None:
     args = init_parser().parse_args()
     
-    # Validate the dataset name
-    assert args.name in SUPPORTED_DATASETS, \
-        f"The only supported datasets are `{SUPPORTED_DATASETS}`. Please use one of these in `--name`."
-
     # Validate HuggingFace token if required
-    if args.name in ["speechcolab/gigaspeech", "WordProject"]:
-        assert args.huggingface_token is not None, \
-            f"A HuggingFace token is required for {args.name}. Please provide it using `--huggingface_token`."
+    # if args.name in ["speechcolab/gigaspeech", "WordProject"]:
+    assert args.huggingface_token is not None, \
+        f"A HuggingFace token is required for {args.name}. Please provide it using `--huggingface_token`."
 
     # Dispatch processing based on the dataset name
     if args.name == "Mann-ki-Baat":
@@ -562,9 +643,8 @@ def main() -> None:
     else:
         raise ValueError(f"Unhandled dataset: {args.name}")
     
-    if args.collate:
-        collate_output_file = args.save_dir / "collated_train_manifest.json"
-        collate_json_files(Path(args.save_dir), Path(collate_output_file))
+    if args.do_split:
+        split_manifest_files(args.save_dir, args.test_duration, args.seed)
 
 if __name__ == "__main__":
     main()
