@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import torch
+from torch.distributed.elastic.multiprocessing.errors import record
 
 from seamless_communication.cli.m4t.finetune import dataloader, dist_utils, trainer
 from seamless_communication.models.unity import (
@@ -140,7 +141,7 @@ def init_parser() -> argparse.ArgumentParser:
     )
     return parser
 
-
+@record
 def main() -> None:
     args = init_parser().parse_args()
     
@@ -206,7 +207,7 @@ def main() -> None:
             batch_size=finetune_params.eval_batch_size,
             rank=dist_utils.get_rank(),
             world_size=dist_utils.get_world_size(),
-            max_audio_length_sec=25.0,
+            max_audio_length_sec=15.0,
             float_dtype=finetune_params.float_dtype,
         ),
         mode="test",

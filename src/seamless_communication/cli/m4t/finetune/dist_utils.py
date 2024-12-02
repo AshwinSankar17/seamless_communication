@@ -49,7 +49,7 @@ def is_main_process() -> bool:
 
 def init_distributed(loggers: List[logging.Logger]) -> None:
     """Initializes the distributed backend"""
-    torch.multiprocessing.set_start_method("spawn")
+    torch.multiprocessing.set_start_method("spawn", force=True)
     if "RANK" not in os.environ:
         logger.error(
             "Cannot init disributed context, as environment varaibles are not set."

@@ -80,7 +80,7 @@ class BatchingConfig:
     world_size: int = 1
     """The world size of the process group."""
 
-    num_workers: int = 0
+    num_workers: int = 8
     """Parallelism in dataset preparation."""
 
     float_dtype: torch.dtype = torch.float16
@@ -136,7 +136,8 @@ class UnitYDataLoader:
             shuffle=self.mode == "train",
             num_workers=self.batching_config.num_workers,
             collate_fn=self._prepare_batch,
-            worker_init_fn=worker_init_fn,
+            pin_memory=True,
+            # worker_init_fn=worker_init_fn,
         )
         return data_loader
 
@@ -208,21 +209,7 @@ class UnitYDataLoader:
             return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
         except:
             logger.exception(f"Failed to load sample path: {sample.source.audio_local_path}")
-            # return True
             return False
-        
-    # def _is_long_src_audio_tgt_text(self, sample: LangPairSample) -> bool:
-    #     # HACK:: causes errored audios to be excluded but this is difficult to follow
-    #     try:
-    #         sample = LangPairSample.from_json(sample)
-    #         wav, sample_rate = torchaudio.load(sample.source.audio_local_path)
-    #         length_s: float = max(wav.shape) / sample_rate
-    #         tokens = self._get_tokenized_target_text(sample)
-    #         return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
-    #     except:
-    #         logger.exception(f"Failed to load sample path: {sample.source.audio_local_path}")
-    #         # return True
-    #         return False
 
     def _drop_overflow_samples(
         self, samples_with_fbanks: List[Tuple[LangPairSample, torch.Tensor]]
@@ -259,12 +246,12 @@ class UnitYDataLoader:
 
         samples = [sample for sample, _ in filtered]
         src_tokens_list = [src_tokens for _, src_tokens in filtered]
-        assert len(samples) > 0
+        assert len(samples) > 0, "No Samples in batch"
         src_tokens = self._batch_tensors(
             src_tokens_list, pad_value=self.batching_config.fbank_feats_pad_idx
         ).to(self.batching_config.float_dtype)
         src_lengths = torch.LongTensor(
-            [src_tokens.shape[0] for src_tokens in src_tokens_list]
+            [src_token.shape[0] for src_token in src_tokens_list]
         )
         
         # output text
@@ -403,16 +390,6 @@ class UnitYDataLoader:
         for dataset_manifest_path in dataset_manifest_paths:
             with open(dataset_manifest_path) as fp_in:
                 dataset.extend([json.loads(line) for line in fp_in])
-        # dataset = list(filter(self.filter_cases, dataset))
+        # dataset = list(filter(self._is_long_src_audio_tgt_text, dataset))
         dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=16)
         return dataset
-
-    # def filter_cases(self, sample: Dict[str, Any]):
-    #     try:
-    #         wav, sample_rate = torchaudio.load(sample['source']['audio_local_path'])
-    #         length_s: float = max(wav.shape) / sample_rate
-    #         tokens = self._get_tokenized_target_text(sample)
-    #         return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
-    #     except:
-    #         logger.exception(f"Failed to load sample path: {sample['source']['audio_local_path']}")
-    #         return False
