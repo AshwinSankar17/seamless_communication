@@ -30,12 +30,12 @@ logger = logging.getLogger("dataset")
 
 
 SUPPORTED_DATASETS = [
-    "Mann-ki-Baat", "WordProject", "NPTEL", 
-    "UGCE-Resources", "Vanipedia", "Spoken-Tutorial", "fleurs", "all"
+    "Mann-ki-Baat", "NPTEL", "UGCE-Resources", 
+    "Vanipedia", "Spoken-Tutorial", "fleurs", "all"
 ]
 
-ALIGNMENT_THRESHOLD = os.environ.get("ALIGNMENT_THRESHOLD", 0.8)
-MINING_THRESHOLD = os.environ.get("ALIGNMENT_THRESHOLD", 0.6)
+ALIGNMENT_THRESHOLD = float(os.environ.get("ALIGNMENT_THRESHOLD", 0.8))
+MINING_THRESHOLD = float(os.environ.get("MINING_THRESHOLD", 0.6))
 
 UNITY_TO_FLEURS_LANG_MAPPING = {
     "eng": "en_us",
@@ -124,14 +124,14 @@ def _dispatch_download_fleurs(
     logger.info(f"Manifest saved to: {manifest_path}")
 
 def download_fleurs_en2indic(huggingface_token: str, save_directory: str, hf_cache_dir: str = "~/.cache/huggingface/datasets",):
-    for split in ['train', 'validation', 'test']:
+    for split in ['train']: #, 'validation', 'test']:
         # for lang in tqdm(UNITY_TO_FLEURS_LANG_MAPPING.keys()):
-        _dispatch_download_fleurs("eng", split, save_directory)
+        _dispatch_download_fleurs("eng", split, save_directory, hf_cache_dir=hf_cache_dir)
 
 def download_fleurs_indic2en(huggingface_token: str, save_directory: str, hf_cache_dir: str = "~/.cache/huggingface/datasets",):
-    for split in ['train', 'validation', 'test']:
+    for split in ['train']: #, 'validation', 'test']:
         for lang in tqdm([x for x in UNITY_TO_FLEURS_LANG_MAPPING.keys() if x != "eng"]):
-            _dispatch_download_fleurs(lang, split, save_directory)
+            _dispatch_download_fleurs(lang, split, save_directory, hf_cache_dir=hf_cache_dir)
 
 def _dispatch_prepare_en2indic(
     dataset: str, 
@@ -158,7 +158,7 @@ def _dispatch_prepare_en2indic(
         "te_text": "tel",
         "ur_text": "urd"
     }
-    ds = load_dataset(dataset, "en2indic", token=huggingface_token, cache_dir=hf_cache_dir)
+    ds = load_dataset(dataset, "en2indic", token=huggingface_token, cache_dir=hf_cache_dir, num_proc=32)
     ds_str = dataset.replace("ai4bharat/", "")
     error_log = open("error.log", "a")
     # Remap column names
@@ -261,7 +261,7 @@ def _dispatch_prepare_indic2en(
         "telugu": "tel",
         "urdu": "urd",
     }
-    ds = load_dataset(dataset, "indic2en", token=huggingface_token, cache_dir=hf_cache_dir)
+    ds = load_dataset(dataset, "indic2en", token=huggingface_token, cache_dir=hf_cache_dir, num_proc=32)
     ds_str = dataset.replace("ai4bharat/", "")
     error_log = open("error.log", "a")
     if col_map is not None:
@@ -296,14 +296,14 @@ def _dispatch_prepare_indic2en(
                             f.write(json.dumps({
                                 "source": {
                                     "id": f"segment_{filename}",
-                                    "text": clean_text(sample.get("text", None)),
+                                    "text": clean_text(sample.get("text")),
                                     "lang":splits[split],
                                     "audio_local_path": save_filepath,
                                     "sampling_rate": 16_000,
                                 },
                                 "target": {
                                     "id": f"segment_{filename}",
-                                    "text": clean_text(sample.get("text", None)),
+                                    "text": clean_text(sample.get("text")),
                                     "lang": splits[split],
                                 }
                                 }) + "\n")
@@ -484,16 +484,16 @@ def init_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-    "--do_split",
-    action="store_true",
-    help="Enable this flag to split each dataset in the save_directory into train and test sets."
-)
+        "--do_split",
+        action="store_true",
+        help="Enable this flag to split each dataset in the save_directory into train and test sets."
+    )
 
     parser.add_argument(
         "--test_duration",
         type=float,
         required=False,
-        default=3000.0,
+        default=1200.0,
         help="Maximum total duration (in seconds) for the test set. Data points are randomly selected until this threshold is reached."
     )
 
@@ -572,6 +572,8 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
         test_duration_threshold (float): Target total duration for the test set (in seconds).
     """
     jsonl_files = list(directory.rglob("manifest.json"))
+
+    jsonl_files = filter(lambda x: "fleurs" not in x, jsonl_files)
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 

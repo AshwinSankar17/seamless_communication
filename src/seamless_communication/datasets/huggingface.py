@@ -97,6 +97,7 @@ class Speech2SpeechFleursDatasetBuilder:
             cache_dir=self.dataset_cache_dir,
             streaming=False,
             trust_remote_code=True,
+            num_proc=32,
         )
         for item in ds:
             audio_path = os.path.join(
