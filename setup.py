@@ -20,19 +20,7 @@ setup(
     author="Fundamental AI Research (FAIR) at Meta",
     url="https://github.com/facebookresearch/seamless_communication",
     license="Creative Commons",
-    install_requires=[
-        "datasets==2.18.0",
-        "fairseq2==0.2.*",
-        "fire",
-        "librosa",
-        "openai-whisper",
-        "simuleval~=1.1.3",
-        "sonar-space==0.2.*",
-        "soundfile",
-        "scipy",
-        "torchaudio",
-        "tqdm",
-    ],
+    install_requires=[],
     entry_points={
         "console_scripts": [
             "m4t_evaluate=seamless_communication.cli.m4t.evaluate.evaluate:main",
