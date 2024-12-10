@@ -139,6 +139,18 @@ def init_parser() -> argparse.ArgumentParser:
         default="cuda",
         help=("Device to fine-tune on. See `torch.device`."),
     )
+    parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default="seamless_finetune",
+        help=("Name of the Weights & Biases run."),
+    )
+    parser.add_argument(
+        "--wandb_entity",
+        type=str,
+        default=None,
+        help=("Weights & Biases entity name (team or user). If not specified, defaults to the logged-in user."),
+    )
     return parser
 
 @record
@@ -166,6 +178,8 @@ def main() -> None:
         warmup_steps=args.warmup_steps,
         eval_steps=args.eval_steps,
         log_steps=args.log_steps,
+        run_name=args.wandb_run_name,
+        entity=args.wandb_entity,
     )
     
     logger.info(f"Finetune Params: {finetune_params}")

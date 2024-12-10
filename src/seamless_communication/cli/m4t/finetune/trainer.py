@@ -7,6 +7,7 @@
 
 import logging
 import time
+import wandb
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -83,6 +84,12 @@ class FinetuneParams:
 
     device: Device = torch.device("cuda")
     """ Where to run computation"""
+    
+    entity: str = "indic-asr"
+    """ Wandb project entity"""
+    
+    run_name: str = "seamlessm4t_v2_indic_stt"
+    """ Wandb project entity"""
 
 
 class UnitYFinetuneWrapper(nn.Module):
@@ -241,6 +248,31 @@ class LossCollector:
         reduced = torch.sum(losses, dim=0).reshape(2).cpu()
         return reduced[0].item(), reduced[1].item()
 
+class WandbLogger:
+    def __init__(self, params, project_name: str = "STT_Translation"):
+        self.is_main_process = dist_utils.is_main_process()
+        if self.is_main_process:
+            wandb.init(
+                project=project_name,
+                config={
+                    "learning_rate": params.learning_rate,
+                    "batch_size": params.batch_size,
+                    "epochs": params.max_epochs,
+                    "label_smoothing": params.label_smoothing,
+                    "warmup_steps": params.warmup_steps,
+                },
+                name=params.run_name,
+                entity=params.entity,
+            )
+
+    def log(self, metrics: dict, step: int = None):
+        if self.is_main_process:
+            wandb.log(metrics, step=step)
+
+    def finish(self):
+        if self.is_main_process:
+            wandb.finish()
+
 
 class UnitYFinetune:
     def __init__(
@@ -252,6 +284,7 @@ class UnitYFinetune:
         freeze_modules: Optional[List[Union[str, torch.nn.Module]]] = None
     ):
         self.params = params
+        self.logger = WandbLogger(params=self.params, project_name="STT_Translation")
         self.calc_loss = CalcLoss(
             label_smoothing=self.params.label_smoothing,
             s2t_vocab_info=model.target_vocab_info,
@@ -328,6 +361,10 @@ class UnitYFinetune:
         self.patience_left = (
             self.params.patience if self.is_best_state else self.patience_left - 1
         )
+
+        if self.logger.is_main_process:
+            self.logger.log({"eval_loss": eval_loss, "best_eval_loss": self.best_eval_loss}, step=self.update_idx)
+
         logger.info(
             f"Eval after {self.update_idx} updates: "
             f"loss={eval_loss:.4f} "
@@ -363,6 +400,10 @@ class UnitYFinetune:
         if (self.update_idx + 1) % self.params.log_steps == 0:
             avg_loss = self.train_loss_hist.reduce()
             self.train_loss_hist.reset()
+
+            if self.logger.is_main_process:
+                self.logger.log({"train_loss": avg_loss, "lr": self.lr_scheduler.get_last_lr()[0]}, step=self.update_idx)
+
             logger.info(
                 f"Epoch {str(self.epoch_idx + 1).zfill(3)} / "
                 f"update {str(self.update_idx + 1).zfill(5)}: "
@@ -412,28 +453,31 @@ class UnitYFinetune:
         
         train_dataloader = self.train_data_loader.get_dataloader()
         
-        while self.epoch_idx < self.params.max_epochs and self.patience_left:
-            for train_batch in tqdm(train_dataloader, desc="Training Steps"):
-                # Run batch through train step
-                self._train_step(train_batch)
-                
-                # Perform eval if its time to eval
-                if not self.update_idx or self.update_idx % self.params.eval_steps != 0:
-                    continue
-                
-                # Clear GPU memory for eval
-                torch.cuda.empty_cache()
-                self._eval_model(n_batches=100)
+        try:
+            while self.epoch_idx < self.params.max_epochs and self.patience_left:
+                for train_batch in tqdm(train_dataloader, desc="Training Steps"):
+                    # Run batch through train step
+                    self._train_step(train_batch)
                     
-                # Save the current model if its the best we've ever had
-                if self.is_best_state:
-                    self._save_model()
-                elif not self.patience_left:
-                    no_improve_steps = self.params.eval_steps * self.params.patience
-                    logger.info(
-                        "Early termination, as eval loss did not improve "
-                        f"over last {no_improve_steps} updates"
-                    )
-                    break
-                
-            self.epoch_idx += 1
+                    # Perform eval if its time to eval
+                    if not self.update_idx or self.update_idx % self.params.eval_steps != 0:
+                        continue
+                    
+                    # Clear GPU memory for eval
+                    torch.cuda.empty_cache()
+                    self._eval_model(n_batches=100)
+                        
+                    # Save the current model if its the best we've ever had
+                    if self.is_best_state:
+                        self._save_model()
+                    elif not self.patience_left:
+                        no_improve_steps = self.params.eval_steps * self.params.patience
+                        logger.info(
+                            "Early termination, as eval loss did not improve "
+                            f"over last {no_improve_steps} updates"
+                        )
+                        break
+                    
+                self.epoch_idx += 1
+        finally:
+            self.logger.finish()
