@@ -26,12 +26,12 @@ OMP_NUM_THREADS=16 TORCH_DISTRIBUTED_DEBUG=DETAIL torchrun --nnodes=1 \
         /data/BhasaAnuvaad/NPTEL/indic2en/telugu/val_manifest.json \
     --model_name seamlessM4T_v2_large \
     --save_model_to /root/repos/seamless_communication/checkpoints/pilot/dry_run.pt \
-    --max_epochs 10 \
-    --batch_size 64 \
+    --max_epochs 100 \
+    --batch_size 32 \
     --learning_rate 2e-6 \
     --warmup_steps 1000 \
     --max_src_tokens 2500 \
-    --eval_steps 100 \
+    --eval_steps 1000 \
     --log_steps 100 \
     --mode SPEECH_TO_TEXT \
     --patience 10
