@@ -58,6 +58,12 @@ def init_parser() -> argparse.ArgumentParser:
         help="Path to save best finetuned model",
     )
     parser.add_argument(
+        "--load_model_from",
+        type=Path,
+        required=True,
+        help="Path of checkpoint to load the model from",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=2343,
@@ -185,6 +191,11 @@ def main() -> None:
     logger.info(f"Finetune Params: {finetune_params}")
     
     model = load_unity_model(args.model_name, device=torch.device("cpu"), dtype=torch.float32)
+    if args.load_model_from:
+        if os.path.exists(args.load_model_from):
+            checkpoint = torch.load(args.load_model_from)
+            model.load_state_dict(checkpoint['model'])
+            
     assert model.target_vocab_info == text_tokenizer.vocab_info
     
     if (
