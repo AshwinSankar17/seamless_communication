@@ -8,6 +8,8 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import random
+import numpy as np
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
@@ -66,7 +68,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seed",
         type=int,
-        default=2343,
+        default=42,
         help="Randomizer seed value",
     )
     parser.add_argument(
@@ -159,9 +161,32 @@ def init_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+def seed_everything(seed: int) -> None:
+    """
+    Seed all relevant random number generators to ensure reproducibility.
+
+    Args:
+        seed (int): The seed value to use for all libraries.
+    """
+    random.seed(seed)  # Python random module
+    np.random.seed(seed)  # NumPy random module
+    torch.manual_seed(seed)  # PyTorch random module
+    
+    # If using CUDA, set deterministic flags for reproducibility
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # If using multi-GPU
+    
+    # Ensure deterministic behavior in cuDNN (may slightly reduce performance)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    print(f"Seeding everything with seed: {seed}")
+
+
 @record
 def main() -> None:
     args = init_parser().parse_args()
+    seed_everything(args.seed)
     
     dist_utils.init_distributed([logger, trainer.logger])
     # float_dtype = torch.float16 if torch.device(args.device).type != "cpu" else torch.bfloat16
