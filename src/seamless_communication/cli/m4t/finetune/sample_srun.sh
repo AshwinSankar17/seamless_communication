@@ -1,9 +1,28 @@
-# To start multi-node training, change nnodes to $NUM_NODES and rdzv-endpoint to $MASTER_ADDR:$MASTER_PORT in all nodes
-OMP_NUM_THREADS=16 TORCH_DISTRIBUTED_DEBUG=DETAIL torchrun --nnodes=1 \
-    --nproc_per_node=4 \
+#!/bin/bash
+
+#SBATCH --job-name=m4t_finetune       # Job name
+#SBATCH --nodes=2                     # Number of nodes
+#SBATCH --ntasks-per-node=1           # Number of tasks per node
+#SBATCH --cpus-per-task=16            # CPUs per task
+#SBATCH --gres=gpu:4                  # GPUs per node
+#SBATCH --time=24:00:00               # Max runtime
+#SBATCH --partition=your_partition    # Partition name
+
+# Set variables
+NUM_NODES=${SLURM_NNODES}
+MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)
+MASTER_PORT=8009  # Ensure this port is free across nodes
+NPROC_PER_NODE=4  # GPUs per node
+
+# Load modules or environment (if required)
+module load pytorch
+
+# Run multi-node training
+srun torchrun \
+    --nnodes=${NUM_NODES} \
+    --nproc_per_node=${NPROC_PER_NODE} \
     --rdzv-backend=c10d \
-    --rdzv-endpoint=localhost:8009 \
-    --no-python \
+    --rdzv-endpoint=${MASTER_ADDR}:${MASTER_PORT} \
     m4t_finetune \
     --train_dataset /data/BhasaAnuvaad/NPTEL/indic2en/assamese/train_manifest.json \
         /data/BhasaAnuvaad/NPTEL/en2indic/english/train_manifest.json \
@@ -36,6 +55,3 @@ OMP_NUM_THREADS=16 TORCH_DISTRIBUTED_DEBUG=DETAIL torchrun --nnodes=1 \
     --log_steps 100 \
     --mode SPEECH_TO_TEXT \
     --patience 10
-    
-    
-    
