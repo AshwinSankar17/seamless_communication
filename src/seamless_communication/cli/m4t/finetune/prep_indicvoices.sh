@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Configurations
-REMOTE_PATH="e2e/asr-transcription/final_releases/"  # Change to your remote folder path
-LOCAL_PATH="/data/indicvoices/iv_full_data"                      # Change to your local folder path
-PYTHON_SCRIPT="create_indicvoices.py"    
-OUTPUT_PATH="/data/indicvoices/iv_prep_data"                    # Python script to run after extraction
+REMOTE_PATH="raj-dabre/asr-transcription/final_releases/"  # Change to your remote folder path
+LOCAL_PATH="data/indicvoices/iv_full_data"                      # Change to your local folder path
+PYTHON_SCRIPT="create_indicvoices.py"
+OUTPUT_FOLDER="data/indicvoices/iv_prep_data"                    # Python script to run after extraction
 
 # Ensure LOCAL_PATH exists
 if [[ -d "$LOCAL_PATH" ]]; then
