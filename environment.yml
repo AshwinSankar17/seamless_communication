@@ -1,4 +1,4 @@
-name: seamless
+name: seamless_comm
 channels:
   - defaults
   - conda-forge

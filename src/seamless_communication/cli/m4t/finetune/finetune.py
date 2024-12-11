@@ -243,6 +243,7 @@ def main() -> None:
         params=finetune_params,
         train_data_loader=train_dataloader,
         eval_data_loader=eval_dataloader,
+        checkpoint=checkpoint if args.load_model_from else None,
         freeze_modules=args.freeze_layers)
     
     finetune.run()
