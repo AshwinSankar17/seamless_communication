@@ -14,12 +14,12 @@ else
     mkdir -p "$LOCAL_PATH"
 fi
 
-# Ensure OUTPUT_FOLDER exists
-if [[ -d "$OUTPUT_FOLDER" ]]; then
-    echo "Output folder exists: $OUTPUT_FOLDER"
+# Ensure OUTPUT_PATH exists
+if [[ -d "$OUTPUT_PATH" ]]; then
+    echo "Output folder exists: $OUTPUT_PATH"
 else
-    echo "Output folder does not exist. Creating: $OUTPUT_FOLDER"
-    mkdir -p "$OUTPUT_FOLDER"
+    echo "Output folder does not exist. Creating: $OUTPUT_PATH"
+    mkdir -p "$OUTPUT_PATH"
 fi
 
 # # Step 1: Download contents of the remote folder using mc cp
@@ -53,7 +53,7 @@ find "$LOCAL_PATH" -type f \( -name "*.wav" \) -print0 | xargs -0 -I {} -P 128 b
 
 # Step 3: Run the Python script
 echo "Running Python script: $PYTHON_SCRIPT"
-python3 "$PYTHON_SCRIPT" --input_folder $LOCAL_PATH --output_folder $OUTPUT_PATH
+python3 "$PYTHON_SCRIPT" --input_folder $LOCAL_PATH --output_PATH $OUTPUT_PATH
 
 if [[ $? -ne 0 ]]; then
     echo "Error: Python script execution failed."

@@ -1,4 +1,4 @@
-name: seamless
+name: seamless_comm
 channels:
   - defaults
   - conda-forge
@@ -171,9 +171,8 @@ dependencies:
       - torch==2.2.2
       - torchaudio==2.2.2
       - torcheval==0.0.7
-      - torchvision==0.20.1
       - tornado==6.4.2
-      - tqdm==4.67.1
+      - tqdm
       - transformers==4.46.3
       - triton==2.2.0
       - typing-extensions==4.12.2

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from tqdm import tqdm
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 
 import torch
 import torch.distributed as dist
@@ -281,6 +281,7 @@ class UnitYFinetune:
         params: FinetuneParams,
         train_data_loader: dataloader.UnitYDataLoader,
         eval_data_loader: Optional[dataloader.UnitYDataLoader] = None,
+        checkpoint: Optional[Dict[str, torch.Tensor]] = None,
         freeze_modules: Optional[List[Union[str, torch.nn.Module]]] = None
     ):
         self.params = params
@@ -316,8 +317,14 @@ class UnitYFinetune:
             start_lr=1e-9,
         )
 
+        if checkpoint:
+            if 'optimizer' in checkpoint:
+                self.optimizer.load_state_dict(checkpoint['optimizer'])
+            if 'lr_scheduler' in checkpoint:
+                self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+
         self.train_loss_hist = LossCollector(device=params.device)
-        self.epoch_idx: int = 0
+        self.epoch_idx: int = self.lr_scheduler.last_epoch
         self.update_idx: int = 0
         self.patience_left: int = self.params.patience
         self.best_eval_loss: Optional[float] = None
@@ -326,7 +333,7 @@ class UnitYFinetune:
 
     def _reset_stats(self) -> None:
         self.train_loss_hist.reset()
-        self.epoch_idx = 0
+        # self.epoch_idx = 0
         self.update_idx = 0
         self.patience_left = self.params.patience
         self.best_eval_loss = None
@@ -441,7 +448,9 @@ class UnitYFinetune:
                 "model": {
                     key.replace("module.model.model.", ""): value
                     for key, value in self.model.state_dict().items()
-                }
+                },
+                "optimizer": self.optimizer.state_dict() if self.optimizer else None,
+                "lr_scheduler": self.lr_scheduler.state_dict() if self.lr_scheduler else None
             }, self.params.save_model_path)
         if dist_utils.is_dist_initialized():
             dist.barrier()
