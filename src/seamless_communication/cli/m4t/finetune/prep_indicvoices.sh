@@ -1,6 +1,6 @@
 #!/bin/bash
 
-run_stage=5
+run_stage=2
 stop_stage=5
 
 # Configurations
