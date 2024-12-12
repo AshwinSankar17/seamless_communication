@@ -1,6 +1,6 @@
 #!/bin/bash
 
-run_stage=2
+run_stage=5
 stop_stage=5
 
 # Configurations
@@ -96,7 +96,7 @@ fi
 
 # Step 5: Iterate through all language folders, make all manifests and collate
 if [ ${run_stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
-    for lang_dir in "$OUTPUT_PATH"/*/; do
+    for lang_dir in "$OUTPUT_PATH"/*; do
         echo "Processing language folder: $lang_dir"
         
         # Paths for training and validation manifests

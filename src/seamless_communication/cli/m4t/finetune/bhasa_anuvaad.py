@@ -31,7 +31,7 @@ logger = logging.getLogger("dataset")
 
 SUPPORTED_DATASETS = [
     "Mann-ki-Baat", "NPTEL", "UGCE-Resources", 
-    "Vanipedia", "Spoken-Tutorial", "fleurs", "all"
+    "Vanipedia", "Spoken-Tutorial", "fleurs", "all", "none"
 ]
 
 ALIGNMENT_THRESHOLD = float(os.environ.get("ALIGNMENT_THRESHOLD", 0.8))
@@ -573,7 +573,7 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
     """
     jsonl_files = list(directory.rglob("manifest.json"))
 
-    jsonl_files = filter(lambda x: "fleurs" not in x, jsonl_files)
+    jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
@@ -643,7 +643,7 @@ def main() -> None:
         download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
         download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
     else:
-        raise ValueError(f"Unhandled dataset: {args.name}")
+        pass
     
     if args.do_split:
         split_manifest_files(args.save_dir, args.test_duration, args.seed)
