@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Configurations
-REMOTE_PATH="raj-dabre/asr-transcription/final_releases/"  # Change to your remote folder path
+REMOTE_PATH="raj-dabre/asr-transcription/final_releases"  # Change to your remote folder path
 LOCAL_PATH="data/indicvoices/iv_full_data"                      # Change to your local folder path
 PYTHON_SCRIPT="create_indicvoices.py"
-OUTPUT_FOLDER="data/indicvoices/iv_prep_data"                    # Python script to run after extraction
+OUTPUT_PATH="data/indicvoices/iv_prep_data"                    # Python script to run after extraction
 
 # Ensure LOCAL_PATH exists
 if [[ -d "$LOCAL_PATH" ]]; then
@@ -24,7 +24,7 @@ fi
 
 # # Step 1: Download contents of the remote folder using mc cp
 echo "Downloading contents from $REMOTE_PATH to $LOCAL_PATH..."
-mc ls $REMOTE_PATH | awk '{print $NF}' | parallel -j16 --bar mc cp $REMOTE_PATH/{} $LOCAL_PATH/{}
+mc ls $REMOTE_PATH | awk '{print $NF}' | parallel -j16 --bar mc cp -r $REMOTE_PATH/{} $LOCAL_PATH/{}
 
 # Initialize a flag to track if any file is missing
 missing_flag=0
@@ -67,7 +67,7 @@ find "$LOCAL_PATH" -type f \( -name "*.wav" \) -print0 | xargs -0 -I {} -P 128 b
 
 # Step 3: Run the Python script
 echo "Running Python script: $PYTHON_SCRIPT"
-python3 "$PYTHON_SCRIPT" --input_folder $LOCAL_PATH --output_PATH $OUTPUT_PATH
+python3 "$PYTHON_SCRIPT" --input_folder $LOCAL_PATH --output_folder $OUTPUT_PATH
 
 if [[ $? -ne 0 ]]; then
     echo "Error: Python script execution failed."
