@@ -40,6 +40,7 @@ language_map = {
 def clean_text(text):
     if text is not None:
         text = re.sub(r"\[.*?\]", "", text)
+        text = re.sub(r"\(.*?\)", "", text)
         text = re.sub(r"\s+", " ", text).strip()
     return text
 

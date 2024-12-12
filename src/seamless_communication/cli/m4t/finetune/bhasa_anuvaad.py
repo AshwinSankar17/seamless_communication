@@ -41,7 +41,7 @@ UNITY_TO_FLEURS_LANG_MAPPING = {
     "eng": "en_us",
     "asm": "as_in",
     "ben": "bn_in",
-    "guj": "hu_in",
+    "guj": "gu_in",
     "hin": "hi_in",
     "kan": "kn_in",
     "mal": "ml_in",
