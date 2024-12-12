@@ -2,7 +2,7 @@
 
 # Configurations
 REMOTE_PATH="e2e/asr-transcription/final_releases/"  # Change to your remote folder path
-LOCAL_PATH="/data/indicvoices/iv_full_data"                      # Change to your local folder path
+LOCAL_PATH="/data/iv"                      # Change to your local folder path
 PYTHON_SCRIPT="create_indicvoices.py"    
 OUTPUT_PATH="/data/indicvoices/iv_prep_data"                    # Python script to run after extraction
 
@@ -24,13 +24,27 @@ fi
 
 # # Step 1: Download contents of the remote folder using mc cp
 echo "Downloading contents from $REMOTE_PATH to $LOCAL_PATH..."
-mc cp --recursive "$REMOTE_PATH" "$LOCAL_PATH"
+mc ls $REMOTE_PATH | awk '{print $NF}' | parallel -j16 --bar mc cp $REMOTE_PATH/{} $LOCAL_PATH/{}
 
-if [[ $? -ne 0 ]]; then
-    echo "Error: Failed to download files from $REMOTE_PATH to $LOCAL_PATH. Exiting."
+# Initialize a flag to track if any file is missing
+missing_flag=0
+
+# Check each file from the source list against the local destination
+echo "Verifying files..."
+mc ls $REMOTE_PATH | awk '{print $NF}' | while read -r file; do
+    if [ ! -f $LOCAL_PATH/$file ]; then
+        echo "Missing: $file"
+        missing_flag=1
+    fi
+done
+
+# Exit if any file is missing
+if [ "$missing_flag" -eq 1 ]; then
+    echo "Verification failed. Some files are missing."
     exit 1
 fi
-echo "Download complete."
+
+echo "All files downloaded successfully."
 
 # Step 2: Untar all .tar files in the local folder
 echo "Extracting .tar files in $LOCAL_PATH..."
