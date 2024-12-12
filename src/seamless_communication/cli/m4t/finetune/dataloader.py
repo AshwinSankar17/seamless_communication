@@ -21,6 +21,7 @@ from fairseq2.data.audio import WaveformToFbankConverter
 from torch import Tensor
 from torch.nn.functional import pad as pad_tensor
 from torch.utils.data import DataLoader
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 from seamless_communication.datasets.datatypes import LangPairSample
 from seamless_communication.models.unity.unit_tokenizer import (
@@ -123,26 +124,52 @@ class UnitYDataLoader:
             dataset_manifest_path = [dataset_manifest_path]
         self.dataset = self._load_manifest(dataset_manifest_path)
         self.max_src_tokens_per_batch = max_src_tokens_per_batch
-
-    def get_dataloader(self) -> DataLoader[SeqsBatch]:
         subset = split_dataset_by_node(
             self.dataset,
             rank=self.batching_config.rank,
             world_size=self.batching_config.world_size,
         )
-        data_loader = DataLoader(
+        self.data_loader = StatefulDataLoader(
             dataset=subset,
             batch_size=self.batching_config.batch_size,
             shuffle=self.mode == "train",
             num_workers=self.batching_config.num_workers,
             collate_fn=self._prepare_batch,
             pin_memory=True,
-            # worker_init_fn=worker_init_fn,
         )
-        return data_loader
+
+    # def get_dataloader(self) -> DataLoader[SeqsBatch]:
+    #     subset = split_dataset_by_node(
+    #         self.dataset,
+    #         rank=self.batching_config.rank,
+    #         world_size=self.batching_config.world_size,
+    #     )
+    #     data_loader = DataLoader(
+    #         dataset=subset,
+    #         batch_size=self.batching_config.batch_size,
+    #         shuffle=self.mode == "train",
+    #         num_workers=self.batching_config.num_workers,
+    #         collate_fn=self._prepare_batch,
+    #         pin_memory=True,
+    #         # worker_init_fn=worker_init_fn,
+    #     )
+    #     return data_loader
+
+    def state_dict(self) -> Dict[str, Any]:
+        """
+        Returns the state dictionary of the dataloader.
+        Includes dataset state and iterator state.
+        """        
+        return self.data_loader.state_dict()
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        """
+        Restores the dataloader state from the given state dictionary.
+        """
+        self.data_loader.load_state_dict(state_dict)
 
     def __iter__(self) -> Iterable[MultimodalSeqsBatch]:
-        return self.get_dataloader().__iter__()
+        return self.data_loader.__iter__()
 
     def _get_source_fbank(self, sample: LangPairSample) -> Tensor:
         wav, sample_rate = torchaudio.load(sample.source.audio_local_path)
@@ -304,86 +331,6 @@ class UnitYDataLoader:
                 target_lengths=units_lengths,
             ),
         )
-    # def _prepare_batch(self, raw_samples: List[Dict[str, Any]]) -> MultimodalSeqsBatch:
-    #     samples = [LangPairSample.from_json(sample) for sample in raw_samples]
-    #     # input speech
-        
-    #     #  - filter long audio samples
-    #     filtered_samples = [
-    #         sample for sample in samples if not self._is_long_src_audio_tgt_text(sample)
-    #     ]
-    #     samples = (
-    #         filtered_samples if filtered_samples else [samples[0]]
-    #     )  # keep at least one sample
-    #     with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
-    #     #  - filter NaNs in fbanks
-    #     filtered = [
-    #         (sample, fbank)
-    #         for sample, fbank in with_fbanks
-    #         if not fbank.isnan().any().item()
-    #     ]
-    #     filtered = self._drop_overflow_samples(filtered)
-
-    #     samples = [sample for sample, _ in filtered]
-    #     src_tokens_list = [src_tokens for _, src_tokens in filtered]
-    #     assert len(samples) > 0
-    #     src_tokens = self._batch_tensors(
-    #         src_tokens_list, pad_value=self.batching_config.fbank_feats_pad_idx
-    #     ).to(self.batching_config.float_dtype)
-    #     src_lengths = torch.LongTensor(
-    #         [src_tokens.shape[0] for src_tokens in src_tokens_list]
-    #     )
-        
-    #     # output text
-    #     text_tokens_list = [
-    #         self._get_tokenized_target_text(sample) for sample in samples
-    #     ]
-    #     text_pad_idx = self.text_tokenizer.vocab_info.pad_idx
-    #     prev_outputs_tokens = self._batch_tensors(
-    #         [tokens[:-1] for tokens in text_tokens_list], pad_value=text_pad_idx
-    #     )
-    #     target_tokens = self._batch_tensors(
-    #         [tokens[1:] for tokens in text_tokens_list], pad_value=text_pad_idx
-    #     )
-    #     tokens_lengths = torch.LongTensor(
-    #         [tokens.shape[0] - 1 for tokens in text_tokens_list]
-    #     )
-    #     # output units
-    #     units_list_raw = [self._get_tokenized_units(sample) for sample in samples]
-    #     if None in units_list_raw:
-    #         prev_outputs_units = None
-    #         target_units = None
-    #         units_lengths = None
-    #     else:
-    #         units_list: List[Tensor] = [
-    #             value for value in units_list_raw if value is not None
-    #         ]
-    #         units_pad_idx = self.unit_tokenizer.vocab_info.pad_idx
-    #         prev_outputs_units = self._batch_tensors(
-    #             [tokens[:-1] for tokens in units_list], pad_value=units_pad_idx
-    #         )
-    #         target_units = self._batch_tensors(
-    #             [tokens[1:] for tokens in units_list], pad_value=units_pad_idx
-    #         )
-    #         units_lengths = torch.LongTensor(
-    #             [tokens.shape[0] - 1 for tokens in units_list]
-    #         )
-    #     return MultimodalSeqsBatch(
-    #         speech_to_text=SeqsBatch(
-    #             src_tokens=src_tokens,
-    #             src_lengths=src_lengths,
-    #             target_tokens=target_tokens,
-    #             prev_output_tokens=prev_outputs_tokens,
-    #             target_lengths=tokens_lengths,
-    #         ),
-    #         text_to_units=SeqsBatch(
-    #             src_tokens=None,
-    #             src_lengths=None,
-    #             target_tokens=target_units,
-    #             prev_output_tokens=prev_outputs_units,
-    #             target_lengths=units_lengths,
-    #         ),
-    #     )
 
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []

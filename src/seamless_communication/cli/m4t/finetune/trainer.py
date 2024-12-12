@@ -322,6 +322,9 @@ class UnitYFinetune:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             if 'lr_scheduler' in checkpoint:
                 self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            if 'dataloader' in checkpoint:
+                self.train_data_loader.load_state_dict(checkpoint['dataloader']['train_data_loader'])
+                self.eval_data_loader.load_state_dict(checkpoint['dataloader']['eval_data_loader'])
 
         self.train_loss_hist = LossCollector(device=params.device)
         self.epoch_idx: int = self.lr_scheduler.last_epoch
@@ -450,7 +453,11 @@ class UnitYFinetune:
                     for key, value in self.model.state_dict().items()
                 },
                 "optimizer": self.optimizer.state_dict() if self.optimizer else None,
-                "lr_scheduler": self.lr_scheduler.state_dict() if self.lr_scheduler else None
+                "lr_scheduler": self.lr_scheduler.state_dict() if self.lr_scheduler else None,
+                "dataloader": {
+                    "train_data_loader": self.train_data_loader.state_dict() if self.train_data_loader else None,
+                    "eval_data_loader": self.eval_data_loader.state_dict() if self.eval_data_loader else None,
+                }
             }, self.params.save_model_path)
         if dist_utils.is_dist_initialized():
             dist.barrier()
