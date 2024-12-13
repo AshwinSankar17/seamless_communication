@@ -338,5 +338,7 @@ class UnitYDataLoader:
             with open(dataset_manifest_path) as fp_in:
                 dataset.extend([json.loads(line) for line in fp_in])
         # dataset = list(filter(self._is_long_src_audio_tgt_text, dataset))
-        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=16)
+        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=32)
+        if self.mode == "test":
+            dataset = dataset.shuffle()
         return dataset
