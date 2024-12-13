@@ -63,6 +63,13 @@ def init_parser() -> argparse.ArgumentParser:
         "--save_freq",
         type=int,
         default=1000,
+        help=("Save model with frequency."),
+    )
+    parser.add_argument(
+        "--freq_type",
+        type=str,
+        choices=['epoch', 'step'],
+        default='step',
         help=("Save model every n steps."),
     )
     parser.add_argument(
@@ -209,6 +216,7 @@ def main() -> None:
         device=torch.device(args.device),
         float_dtype=float_dtype,
         save_freq=args.save_freq,
+        freq_type=args.freq_type,
         train_batch_size=args.batch_size,
         eval_batch_size=args.batch_size,
         patience=args.patience,

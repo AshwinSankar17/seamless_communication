@@ -56,7 +56,10 @@ class FinetuneParams:
     """Float Dtype"""
 
     save_freq: int = 1000
-    """Save every n steps."""
+    """Save every n steps/epochs."""
+
+    freq_type: str = 'step'
+    """Save every step/epoch. save_freq gets updated if it is epoch."""
 
     max_epochs: int = 10
     """ Maximum number of trainign epochs"""
@@ -283,7 +286,6 @@ class UnitYFinetune:
         freeze_modules: Optional[List[Union[str, torch.nn.Module]]] = None
     ):
         self.params = params
-        self.logger = WandbLogger(params=self.params, project_name="STT_Translation")
         self.calc_loss = CalcLoss(
             label_smoothing=self.params.label_smoothing,
             s2t_vocab_info=model.target_vocab_info,
@@ -325,6 +327,10 @@ class UnitYFinetune:
                 # self.train_dataloader.load_state_dict(checkpoint['dataloader']['train_data_loader'])
                 # self.eval_dataloader.load_state_dict(checkpoint['dataloader']['eval_data_loader'])
 
+        if self.params.freq_type == 'epoch':
+            self.params.save_freq *= len(train_data_loader.data_loader)
+        
+        self.logger = WandbLogger(params=self.params, project_name="STT_Translation")
         self.train_loss_hist = LossCollector(device=params.device)
         self.epoch_idx: int = self.lr_scheduler.last_epoch
         self.update_idx: int = 0
