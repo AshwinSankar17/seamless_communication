@@ -101,7 +101,7 @@ def _dispatch_download_fleurs(
         torch.device("cuda:0") if torch.cuda.device_count() > 0 else torch.device("cpu")
     )
     os.makedirs(f"{save_directory}/{source_lang}", exist_ok=True)
-    manifest_path: str = os.path.join(save_directory, f"fleurs/{source_lang}/{split}_manifest.json")
+    manifest_path: str = os.path.join(save_directory, f"{source_lang}/{split}_manifest.json")
     with open(manifest_path, "w") as fp_out:
         for target_lang in UNITY_TO_FLEURS_LANG_MAPPING.keys():
             tokenizer = UnitSpeechTokenizer(device=device)
