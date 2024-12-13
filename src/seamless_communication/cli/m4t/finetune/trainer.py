@@ -490,7 +490,7 @@ class UnitYFinetune:
                 #     "train_data_loader": self.train_dataloader.state_dict() if self.train_data_loader else None,
                 #     "eval_data_loader": self.eval_dataloader.state_dict() if self.eval_data_loader else None,
                 # }
-            }, save_dir / f"checkpoint_step={step_idx}")
+            }, save_dir / f"checkpoint_step={step_idx}.pt")
         if dist_utils.is_dist_initialized():
             dist.barrier()
 
