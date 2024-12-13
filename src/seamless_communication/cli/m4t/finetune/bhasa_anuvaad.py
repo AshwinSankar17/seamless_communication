@@ -31,7 +31,7 @@ logger = logging.getLogger("dataset")
 
 SUPPORTED_DATASETS = [
     "Mann-ki-Baat", "NPTEL", "UGCE-Resources", 
-    "Vanipedia", "Spoken-Tutorial", "fleurs", "all"
+    "Vanipedia", "Spoken-Tutorial", "fleurs", "all", "none"
 ]
 
 ALIGNMENT_THRESHOLD = float(os.environ.get("ALIGNMENT_THRESHOLD", 0.8))
@@ -443,7 +443,7 @@ def init_parser() -> argparse.ArgumentParser:
         "--direction",
         type=str,
         required=True,
-        choices=["indic2en", "en2indic", "all"],  # Use 'choices' for validation.
+        choices=["indic2en", "en2indic", "all", "none"],  # Use 'choices' for validation.
         help=(
             "Translation direction for the dataset preparation:\n"
             "  - 'indic2en': Indic language to English.\n"
@@ -520,6 +520,7 @@ def calculate_audio_duration(audio_path: str) -> float:
     """
     try:
         info = ta.info(audio_path)
+        print(info)
         return info.num_samples / info.sample_rate
     except Exception as e:
         print(f"Error calculating duration for {audio_path}: {e}")
@@ -571,9 +572,19 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
         directory (Path): The root directory to search for `manifest.json` files.
         test_duration_threshold (float): Target total duration for the test set (in seconds).
     """
+    print(f"Searching for `manifest.json` files in {directory} for splitting...")
     jsonl_files = list(directory.rglob("manifest.json"))
+    print(jsonl_files)
+
+    ## These are posix paths, convert to string
+
+    jsonl_files = [str(x) for x in jsonl_files]
+
+    print(jsonl_files)
 
     jsonl_files = filter(lambda x: "fleurs" not in x, jsonl_files)
+
+    jsonl_files = list(jsonl_files)
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
@@ -642,6 +653,8 @@ def main() -> None:
         download_vanipedia(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
         download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
         download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+    elif args.name == "none":
+        print("No dataset selected. Assuming they are already downloaded.")
     else:
         raise ValueError(f"Unhandled dataset: {args.name}")
     
