@@ -493,7 +493,7 @@ def init_parser() -> argparse.ArgumentParser:
         "--test_duration",
         type=float,
         required=False,
-        default=1200.0,
+        default=600.0,
         help="Maximum total duration (in seconds) for the test set. Data points are randomly selected until this threshold is reached."
     )
 
