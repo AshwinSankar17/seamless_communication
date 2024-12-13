@@ -1,33 +1,17 @@
 # To start multi-node training, change nnodes to $NUM_NODES and rdzv-endpoint to $MASTER_ADDR:$MASTER_PORT in all nodes
+export CUDA_VISIBLE_DEVICES=0
+
 OMP_NUM_THREADS=16 TORCH_DISTRIBUTED_DEBUG=DETAIL torchrun --nnodes=1 \
-    --nproc_per_node=4 \
+    --nproc_per_node=1 \
     --rdzv-backend=c10d \
     --rdzv-endpoint=localhost:8009 \
     --no-python \
     m4t_finetune \
-    --train_dataset /data/BhasaAnuvaad/NPTEL/indic2en/assamese/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/en2indic/english/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/bengali/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/gujarati/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/hindi/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/kannada/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/malayalam/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/marathi/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/tamil/train_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/telugu/train_manifest.json \
-    --eval_dataset /data/BhasaAnuvaad/NPTEL/indic2en/assamese/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/en2indic/english/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/bengali/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/gujarati/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/hindi/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/kannada/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/malayalam/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/marathi/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/tamil/val_manifest.json \
-        /data/BhasaAnuvaad/NPTEL/indic2en/telugu/val_manifest.json \
+    --train_dataset data/BhasaAnuvaad/Mann-ki-Baat/indic2en/punjabi/train_manifest.json \
+    --eval_dataset data/BhasaAnuvaad/Mann-ki-Baat/indic2en/punjabi/test_manifest.json \
     --model_name seamlessM4T_v2_large \
-    --save_model_to /root/repos/seamless_communication/checkpoints/pilot/dry_run.pt \
-    --max_epochs 100 \
+    --save_model_to models/checkpoints/pilot/dry_run.pt \
+    --max_epochs 1 \
     --batch_size 32 \
     --learning_rate 2e-6 \
     --warmup_steps 1000 \

@@ -250,13 +250,14 @@ class LossCollector:
 
 class WandbLogger:
     def __init__(self, params, project_name: str = "STT_Translation"):
+        print(params)
         self.is_main_process = dist_utils.is_main_process()
         if self.is_main_process:
             wandb.init(
                 project=project_name,
                 config={
                     "learning_rate": params.learning_rate,
-                    "batch_size": params.batch_size,
+                    "batch_size": params.train_batch_size,
                     "epochs": params.max_epochs,
                     "label_smoothing": params.label_smoothing,
                     "warmup_steps": params.warmup_steps,

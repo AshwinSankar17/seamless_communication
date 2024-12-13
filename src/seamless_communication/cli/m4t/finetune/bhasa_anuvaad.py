@@ -102,7 +102,7 @@ def _dispatch_download_fleurs(
     )
     os.makedirs(f"{save_directory}/{source_lang}", exist_ok=True)
     manifest_path: str = os.path.join(save_directory, f"{source_lang}/{split}_manifest.json")
-    with open(manifest_path, "a") as fp_out:
+    with open(manifest_path, "w") as fp_out:
         for target_lang in UNITY_TO_FLEURS_LANG_MAPPING.keys():
             tokenizer = UnitSpeechTokenizer(device=device)
             dataset_iterator = Speech2SpeechFleursDatasetBuilder(
@@ -493,7 +493,7 @@ def init_parser() -> argparse.ArgumentParser:
         "--test_duration",
         type=float,
         required=False,
-        default=1200.0,
+        default=600.0,
         help="Maximum total duration (in seconds) for the test set. Data points are randomly selected until this threshold is reached."
     )
 
@@ -520,8 +520,7 @@ def calculate_audio_duration(audio_path: str) -> float:
     """
     try:
         info = ta.info(audio_path)
-        print(info)
-        return info.num_samples / info.sample_rate
+        return info.num_frames / info.sample_rate
     except Exception as e:
         print(f"Error calculating duration for {audio_path}: {e}")
         return 0.0
@@ -582,9 +581,11 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
 
     print(jsonl_files)
 
-    jsonl_files = filter(lambda x: "fleurs" not in x, jsonl_files)
+    jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
 
-    jsonl_files = list(jsonl_files)
+    ## Convert back to Path objects
+
+    jsonl_files = [Path(x) for x in jsonl_files]
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
@@ -656,7 +657,7 @@ def main() -> None:
     elif args.name == "none":
         print("No dataset selected. Assuming they are already downloaded.")
     else:
-        raise ValueError(f"Unhandled dataset: {args.name}")
+        pass
     
     if args.do_split:
         split_manifest_files(args.save_dir, args.test_duration, args.seed)

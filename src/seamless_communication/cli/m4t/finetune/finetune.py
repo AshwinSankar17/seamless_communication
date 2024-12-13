@@ -62,7 +62,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--load_model_from",
         type=Path,
-        required=True,
+        required=False,
         help="Path of checkpoint to load the model from",
     )
     parser.add_argument(
