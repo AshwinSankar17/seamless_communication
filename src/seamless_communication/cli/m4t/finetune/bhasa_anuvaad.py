@@ -101,8 +101,8 @@ def _dispatch_download_fleurs(
         torch.device("cuda:0") if torch.cuda.device_count() > 0 else torch.device("cpu")
     )
     os.makedirs(f"{save_directory}/{source_lang}", exist_ok=True)
-    manifest_path: str = os.path.join(save_directory, f"{source_lang}/{split}_manifest.json")
-    with open(manifest_path, "a") as fp_out:
+    manifest_path: str = os.path.join(save_directory, f"fleurs/{source_lang}/{split}_manifest.json")
+    with open(manifest_path, "w") as fp_out:
         for target_lang in UNITY_TO_FLEURS_LANG_MAPPING.keys():
             tokenizer = UnitSpeechTokenizer(device=device)
             dataset_iterator = Speech2SpeechFleursDatasetBuilder(
@@ -520,7 +520,7 @@ def calculate_audio_duration(audio_path: str) -> float:
     """
     try:
         info = ta.info(audio_path)
-        return info.num_samples / info.sample_rate
+        return info.num_frames / info.sample_rate
     except Exception as e:
         print(f"Error calculating duration for {audio_path}: {e}")
         return 0.0
@@ -573,7 +573,7 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
     """
     jsonl_files = list(directory.rglob("manifest.json"))
 
-    jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
+    # jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
