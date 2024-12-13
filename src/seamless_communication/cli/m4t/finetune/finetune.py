@@ -60,6 +60,12 @@ def init_parser() -> argparse.ArgumentParser:
         help="Path to save best finetuned model",
     )
     parser.add_argument(
+        "--save_freq",
+        type=int,
+        default=1000,
+        help=("Save model every n steps."),
+    )
+    parser.add_argument(
         "--load_model_from",
         type=Path,
         required=False,
@@ -202,6 +208,7 @@ def main() -> None:
         save_model_path=args.save_model_to,
         device=torch.device(args.device),
         float_dtype=float_dtype,
+        save_freq=args.save_freq,
         train_batch_size=args.batch_size,
         eval_batch_size=args.batch_size,
         patience=args.patience,

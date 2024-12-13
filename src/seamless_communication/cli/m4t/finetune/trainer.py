@@ -48,12 +48,15 @@ class FinetuneParams:
     
     save_model_path: Path
     """Path were to save finetuned model."""
-
+    
     finetune_mode: FinetuneMode = FinetuneMode.TEXT_TO_SPEECH
     """Allows to freeze S2T or T2U part of the model"""
     
     float_dtype: torch.dtype = torch.float16
     """Float Dtype"""
+
+    save_freq: int = 1000
+    """Save every n steps."""
 
     max_epochs: int = 10
     """ Maximum number of trainign epochs"""
@@ -460,16 +463,46 @@ class UnitYFinetune:
             }, self.params.save_model_path)
         if dist_utils.is_dist_initialized():
             dist.barrier()
+    
+    def _save_model_every_x_steps(self, step_idx, batch_idx) -> None:
+        logger.info("Saving model")
+        if not isinstance(self.params.save_model_path, Path):
+            save_dir = Path(self.params.save_model_path).parent
+        else:
+            save_dir = self.params.save_model_path.parent
+        
+        if not save_dir.exists():
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+        if dist_utils.is_main_process():
+            torch.save({
+                "model_name": self.params.model_name,
+                "model": {
+                    key.replace("module.model.model.", ""): value
+                    for key, value in self.model.state_dict().items()
+                },
+                "optimizer": self.optimizer.state_dict() if self.optimizer else None,
+                "lr_scheduler": self.lr_scheduler.state_dict() if self.lr_scheduler else None,
+                "dataloader": {
+                    "batch_idx": batch_idx
+                }
+                # "dataloader": {
+                #     "train_data_loader": self.train_dataloader.state_dict() if self.train_data_loader else None,
+                #     "eval_data_loader": self.eval_dataloader.state_dict() if self.eval_data_loader else None,
+                # }
+            }, save_dir / f"checkpoint_step={step_idx}")
+        if dist_utils.is_dist_initialized():
+            dist.barrier()
 
     def run(self) -> None:
         logger.info("Start Finetuning")
         self._reset_stats()
         self._eval_model(n_batches=100)
-        
         train_dataloader = self.train_data_loader.data_loader
         try:
-            batch_idx = 0
+            step_idx = 0
             while self.epoch_idx < self.params.max_epochs and self.patience_left:
+                batch_idx = 0
                 for train_batch in tqdm(train_dataloader, desc="Training Steps"):
                     if batch_idx < self.skip_batches:
                         batch_idx += 1
@@ -477,6 +510,9 @@ class UnitYFinetune:
                     # Run batch through train step
                     self._train_step(train_batch)
                     batch_idx += 1
+                    step_idx += 1
+                    if step_idx % self.params.save_freq == 0:
+                        self._save_model_every_x_steps(step_idx, batch_idx)
                     # Perform eval if its time to eval
                     if not self.update_idx or self.update_idx % self.params.eval_steps != 0:
                         continue
@@ -497,5 +533,8 @@ class UnitYFinetune:
                         break
                     
                 self.epoch_idx += 1
+            torch.cuda.empty_cache()
+            self._eval_model(n_batches=100)
+            self._save_model_every_x_steps(step_idx, batch_idx)
         finally:
             self.logger.finish()
