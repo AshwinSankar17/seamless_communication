@@ -9,6 +9,7 @@ import logging
 import time
 import wandb
 from contextlib import contextmanager
+import dataclasses
 from dataclasses import dataclass
 from enum import Enum
 from tqdm import tqdm
@@ -254,13 +255,7 @@ class WandbLogger:
         if self.is_main_process:
             wandb.init(
                 project=project_name,
-                config={
-                    "learning_rate": params.learning_rate,
-                    "batch_size": params.batch_size,
-                    "epochs": params.max_epochs,
-                    "label_smoothing": params.label_smoothing,
-                    "warmup_steps": params.warmup_steps,
-                },
+                config=dataclasses.asdict(params),
                 name=params.run_name,
                 entity=params.entity,
             )
@@ -316,15 +311,16 @@ class UnitYFinetune:
             num_warmup_steps=self.params.warmup_steps,
             start_lr=1e-9,
         )
-
+        self.skip_batches = 0
         if checkpoint:
             if 'optimizer' in checkpoint:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             if 'lr_scheduler' in checkpoint:
                 self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             if 'dataloader' in checkpoint:
-                self.train_data_loader.load_state_dict(checkpoint['dataloader']['train_data_loader'])
-                self.eval_data_loader.load_state_dict(checkpoint['dataloader']['eval_data_loader'])
+                self.skip_batches = checkpoint['dataloader']['batch_idx']
+                # self.train_dataloader.load_state_dict(checkpoint['dataloader']['train_data_loader'])
+                # self.eval_dataloader.load_state_dict(checkpoint['dataloader']['eval_data_loader'])
 
         self.train_loss_hist = LossCollector(device=params.device)
         self.epoch_idx: int = self.lr_scheduler.last_epoch
@@ -390,7 +386,7 @@ class UnitYFinetune:
         logger.info(f"Evaluation Step {self.update_idx // self.params.eval_steps}...")
         loss_hist = LossCollector(device=self.params.device)
         self.model.eval()
-        for batch in self.eval_data_loader.get_dataloader():
+        for batch in self.eval_data_loader.data_loader:
             if n_batches == 0:
                 break
             assert batch.speech_to_text.src_tokens is not None
@@ -443,7 +439,7 @@ class UnitYFinetune:
         self._train_step_log()
         self.update_idx += 1
 
-    def _save_model(self) -> None:
+    def _save_model(self, batch_idx) -> None:
         logger.info("Saving model")
         if dist_utils.is_main_process():
             torch.save({
@@ -455,9 +451,12 @@ class UnitYFinetune:
                 "optimizer": self.optimizer.state_dict() if self.optimizer else None,
                 "lr_scheduler": self.lr_scheduler.state_dict() if self.lr_scheduler else None,
                 "dataloader": {
-                    "train_data_loader": self.train_data_loader.state_dict() if self.train_data_loader else None,
-                    "eval_data_loader": self.eval_data_loader.state_dict() if self.eval_data_loader else None,
+                    "batch_idx": batch_idx
                 }
+                # "dataloader": {
+                #     "train_data_loader": self.train_dataloader.state_dict() if self.train_data_loader else None,
+                #     "eval_data_loader": self.eval_dataloader.state_dict() if self.eval_data_loader else None,
+                # }
             }, self.params.save_model_path)
         if dist_utils.is_dist_initialized():
             dist.barrier()
@@ -467,14 +466,17 @@ class UnitYFinetune:
         self._reset_stats()
         self._eval_model(n_batches=100)
         
-        train_dataloader = self.train_data_loader.get_dataloader()
-        
+        train_dataloader = self.train_data_loader.data_loader
         try:
+            batch_idx = 0
             while self.epoch_idx < self.params.max_epochs and self.patience_left:
                 for train_batch in tqdm(train_dataloader, desc="Training Steps"):
+                    if batch_idx < self.skip_batches:
+                        batch_idx += 1
+                        continue
                     # Run batch through train step
                     self._train_step(train_batch)
-                    
+                    batch_idx += 1
                     # Perform eval if its time to eval
                     if not self.update_idx or self.update_idx % self.params.eval_steps != 0:
                         continue
@@ -485,7 +487,7 @@ class UnitYFinetune:
                         
                     # Save the current model if its the best we've ever had
                     if self.is_best_state:
-                        self._save_model()
+                        self._save_model(batch_idx)
                     elif not self.patience_left:
                         no_improve_steps = self.params.eval_steps * self.params.patience
                         logger.info(

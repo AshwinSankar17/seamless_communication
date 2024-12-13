@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import random
 import numpy as np
 import torch
 import torchaudio
@@ -89,9 +90,11 @@ class BatchingConfig:
 
 
 def worker_init_fn(worker_id: int) -> None:
-    # np.random.seed(np.random.get_state()[1][0] + worker_id)  # type: ignore
-    seed = torch.initial_seed() % (2**32)
-    np.random.seed(seed + worker_id)
+    worker_seed_value = torch.initial_seed() % (2**32)  # Get initial seed for the worker
+    random.seed(worker_seed_value)
+    np.random.seed(worker_seed_value)
+    torch.manual_seed(worker_seed_value)
+
 
 
 class UnitYDataLoader:
@@ -129,13 +132,14 @@ class UnitYDataLoader:
             rank=self.batching_config.rank,
             world_size=self.batching_config.world_size,
         )
-        self.data_loader = StatefulDataLoader(
+        self.data_loader = DataLoader(
             dataset=subset,
             batch_size=self.batching_config.batch_size,
             shuffle=self.mode == "train",
             num_workers=self.batching_config.num_workers,
             collate_fn=self._prepare_batch,
             pin_memory=True,
+            # worker_init_fn=worker_init_fn,
         )
 
     # def get_dataloader(self) -> DataLoader[SeqsBatch]:

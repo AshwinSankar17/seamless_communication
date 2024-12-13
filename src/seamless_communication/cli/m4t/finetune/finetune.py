@@ -62,7 +62,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--load_model_from",
         type=Path,
-        required=True,
+        required=False,
         help="Path of checkpoint to load the model from",
     )
     parser.add_argument(
@@ -173,8 +173,9 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)  # PyTorch random module
     
     # If using CUDA, set deterministic flags for reproducibility
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # If using multi-GPU
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # If using multi-GPU
     
     # Ensure deterministic behavior in cuDNN (may slightly reduce performance)
     torch.backends.cudnn.deterministic = True
