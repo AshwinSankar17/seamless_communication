@@ -573,7 +573,7 @@ def split_manifest_files(directory: Path, test_duration_threshold: float, seed: 
     """
     jsonl_files = list(directory.rglob("manifest.json"))
 
-    # jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
+    jsonl_files = list(filter(lambda x: "fleurs" not in x, jsonl_files))
 
     print(f"Found {len(jsonl_files)} `manifest.json` files in {directory} for splitting.")
 
