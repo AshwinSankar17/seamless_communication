@@ -352,9 +352,13 @@ class UnitYDataLoader:
         return dataset
 
 def make_consistent(example):
+    allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
+    # Ensure IDs are strings
     example['source']['id'] = str(example['source']['id'])
-    if 'waveform' in example['source']:
-        for key in ['waveform', 'units']:
-            del example['source'][key]
-            del example['target'][key]
+    example['target']['id'] = str(example['target']['id'])
+
+    # Retain only allowed keys in source and target
+    example['source'] = {key: value for key, value in example['source'].items() if key in allowed_keys}
+    example['target'] = {key: value for key, value in example['target'].items() if key in allowed_keys}
+    
     return example
