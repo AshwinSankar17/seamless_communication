@@ -14,7 +14,7 @@ import random
 import numpy as np
 import torch
 import torchaudio
-from datasets import Dataset
+from datasets import Dataset, load_dataset, concatenate_datasets
 from datasets.distributed import split_dataset_by_node
 from fairseq2.data.text import TextTokenEncoder
 from fairseq2.models.nllb import NllbTokenizer
@@ -339,10 +339,22 @@ class UnitYDataLoader:
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []
         for dataset_manifest_path in dataset_manifest_paths:
-            with open(dataset_manifest_path) as fp_in:
-                dataset.extend([json.loads(line) for line in fp_in])
+            ds = load_dataset("json", data_files=dataset_manifest_path)["train"]
+            ds = ds.map(make_consistent, num_proc=64)
+            dataset.append(ds)
+            # with open(dataset_manifest_path) as fp_in:
+            #     dataset.extend([json.loads(line) for line in fp_in])
         # dataset = list(filter(self._is_long_src_audio_tgt_text, dataset))
-        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=32)
+        # dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=32)
+        dataset = concatenate_datasets(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
         if self.mode == "test":
             dataset = dataset.shuffle()
         return dataset
+
+def make_consistent(example):
+    example['source']['id'] = str(example['source']['id'])
+    if 'waveform' in example['source']:
+        for key in ['waveform', 'units']:
+            del example['source'][key]
+            del example['target'][key]
+    return example
