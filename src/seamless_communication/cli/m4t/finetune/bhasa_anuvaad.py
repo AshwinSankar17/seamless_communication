@@ -31,7 +31,7 @@ logger = logging.getLogger("dataset")
 
 SUPPORTED_DATASETS = [
     "Mann-ki-Baat", "NPTEL", "UGCE-Resources", 
-    "Vanipedia", "Spoken-Tutorial", "fleurs", "all", "none"
+    "Vanipedia", "Spoken-Tutorial", "fleurs", "all", "IndicVoices-ST", "WordProject", "none"
 ]
 
 ALIGNMENT_THRESHOLD = float(os.environ.get("ALIGNMENT_THRESHOLD", 0.8))
@@ -344,6 +344,16 @@ def download_mkb(subset: str, huggingface_token: str, save_directory: str, hf_ca
     else:
         raise ValueError(f"{subset} does not exist for Mann-ki-Baat dataset")
 
+def download_ivst(subset: str, huggingface_token: str, save_directory: str, hf_cache_dir: str):
+    # os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
+    col_map = {"chunked_audio_filepath": "audio"}
+    if subset == "indic2en":
+        _dispatch_prepare_indic2en("ai4bharat/IndicVoices-ST", huggingface_token, save_directory, hf_cache_dir, col_map)
+    elif subset == "all":
+        _dispatch_prepare_indic2en("ai4bharat/IndicVoices-ST", huggingface_token, save_directory, hf_cache_dir, col_map)
+    else:
+        raise ValueError(f"{subset} does not exist for IndicVoices-ST dataset")
+
 def download_word_project(subset: str, huggingface_token: str, save_directory: str, hf_cache_dir: str):
     # os.makedirs(os.path.join(save_directory, f"{subset}/wavs"), exist_ok=True)
     col_map = {"chunked_audio_filepath": "audio"}
@@ -433,6 +443,7 @@ def init_parser() -> argparse.ArgumentParser:
     
     parser.add_argument(
         "--name",
+        nargs="+",
         type=str,
         required=True,
         choices=SUPPORTED_DATASETS,
@@ -633,31 +644,35 @@ def main() -> None:
         f"A HuggingFace token is required for {args.name}. Please provide it using `--huggingface_token`."
 
     # Dispatch processing based on the dataset name
-    if args.name == "Mann-ki-Baat":
-        download_mkb(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "WordProject":
-        download_word_project(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "NPTEL":
-        download_nptel(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "UGCE-Resources":
-        download_ugce(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "Vanipedia":
-        download_vanipedia(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "Spoken-Tutorial":
-        download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "fleurs":
-        download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "all":
-        download_mkb(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-        download_word_project(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-        download_ugce(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-        download_vanipedia(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-        download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-        download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
-    elif args.name == "none":
-        print("No dataset selected. Assuming they are already downloaded.")
-    else:
-        pass
+    for name in args.name:
+        if name == "IndicVoices-ST":
+            download_ivst(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "Mann-ki-Baat":
+            download_mkb(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "WordProject":
+            download_word_project(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "NPTEL":
+            download_nptel(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "UGCE-Resources":
+            download_ugce(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "Vanipedia":
+            download_vanipedia(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "Spoken-Tutorial":
+            download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "fleurs":
+            download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "all":
+            download_mkb(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_ivst(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_word_project(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_ugce(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_vanipedia(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_spoken_tutorial(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+        elif name == "none":
+            print("No dataset selected. Assuming they are already downloaded.")
+        else:
+            pass
     
     if args.do_split:
         split_manifest_files(args.save_dir, args.test_duration, args.seed)

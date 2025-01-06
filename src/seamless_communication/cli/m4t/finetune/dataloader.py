@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import random
 import numpy as np
 import torch
 import torchaudio
@@ -89,9 +90,11 @@ class BatchingConfig:
 
 
 def worker_init_fn(worker_id: int) -> None:
-    # np.random.seed(np.random.get_state()[1][0] + worker_id)  # type: ignore
-    seed = torch.initial_seed() % (2**32)
-    np.random.seed(seed + worker_id)
+    worker_seed_value = torch.initial_seed() % (2**32)  # Get initial seed for the worker
+    random.seed(worker_seed_value)
+    np.random.seed(worker_seed_value)
+    torch.manual_seed(worker_seed_value)
+
 
 
 class UnitYDataLoader:
@@ -129,13 +132,14 @@ class UnitYDataLoader:
             rank=self.batching_config.rank,
             world_size=self.batching_config.world_size,
         )
-        self.data_loader = StatefulDataLoader(
+        self.data_loader = DataLoader(
             dataset=subset,
             batch_size=self.batching_config.batch_size,
             shuffle=self.mode == "train",
             num_workers=self.batching_config.num_workers,
             collate_fn=self._prepare_batch,
             pin_memory=True,
+            # worker_init_fn=worker_init_fn,
         )
 
     # def get_dataloader(self) -> DataLoader[SeqsBatch]:
@@ -334,9 +338,22 @@ class UnitYDataLoader:
 
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []
+        allowed_keys_source = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate'] ## Delete all keys except these
+        allowed_keys_target = ['id', 'text', 'lang'] ## Delete all keys except these
         for dataset_manifest_path in dataset_manifest_paths:
+            # print(f"Loading dataset from {dataset_manifest_path}")
             with open(dataset_manifest_path) as fp_in:
-                dataset.extend([json.loads(line) for line in fp_in])
+                to_extend = []
+                for line in fp_in:
+                    sample = json.loads(line) ## This has "source" and "target". Under this, keep only allowed keys.
+                    # print(sample.keys())
+                    # print(sample['source'].keys())
+                    # print(sample['target'].keys())
+                    # break
+                    sample['source'] = {k: v for k, v in sample['source'].items() if k in allowed_keys_source}
+                    sample['target'] = {k: v for k, v in sample['target'].items() if k in allowed_keys_target}
+                    to_extend.append(sample)
+                dataset.extend(to_extend)
         # dataset = list(filter(self._is_long_src_audio_tgt_text, dataset))
         dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=32)
         if self.mode == "test":

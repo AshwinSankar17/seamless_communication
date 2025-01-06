@@ -173,8 +173,9 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)  # PyTorch random module
     
     # If using CUDA, set deterministic flags for reproducibility
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # If using multi-GPU
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # If using multi-GPU
     
     # Ensure deterministic behavior in cuDNN (may slightly reduce performance)
     torch.backends.cudnn.deterministic = True
