@@ -36,14 +36,14 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--train_dataset",
         nargs='+',
-        type=Path,
+        type=str,
         required=True,
         help="Path to manifest with train samples",
     )
     parser.add_argument(
         "--eval_dataset",
         nargs='+',
-        type=Path,
+        type=str,
         required=True,
         help="Path to manifest with eval samples",
     )
@@ -58,6 +58,19 @@ def init_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="Path to save best finetuned model",
+    )
+    parser.add_argument(
+        "--save_freq",
+        type=int,
+        default=1000,
+        help=("Save model with frequency."),
+    )
+    parser.add_argument(
+        "--freq_type",
+        type=str,
+        choices=['epoch', 'step'],
+        default='step',
+        help=("Save model every n steps."),
     )
     parser.add_argument(
         "--load_model_from",
@@ -202,6 +215,8 @@ def main() -> None:
         save_model_path=args.save_model_to,
         device=torch.device(args.device),
         float_dtype=float_dtype,
+        save_freq=args.save_freq,
+        freq_type=args.freq_type,
         train_batch_size=args.batch_size,
         eval_batch_size=args.batch_size,
         patience=args.patience,

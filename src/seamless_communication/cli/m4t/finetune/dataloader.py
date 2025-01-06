@@ -14,7 +14,7 @@ import random
 import numpy as np
 import torch
 import torchaudio
-from datasets import Dataset
+from datasets import Dataset, load_dataset, concatenate_datasets
 from datasets.distributed import split_dataset_by_node
 from fairseq2.data.text import TextTokenEncoder
 from fairseq2.models.nllb import NllbTokenizer
@@ -338,24 +338,21 @@ class UnitYDataLoader:
 
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []
-        allowed_keys_source = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate'] ## Delete all keys except these
-        allowed_keys_target = ['id', 'text', 'lang'] ## Delete all keys except these
+        allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
         for dataset_manifest_path in dataset_manifest_paths:
-            # print(f"Loading dataset from {dataset_manifest_path}")
+            alljsonlines = []
             with open(dataset_manifest_path) as fp_in:
-                to_extend = []
                 for line in fp_in:
-                    sample = json.loads(line) ## This has "source" and "target". Under this, keep only allowed keys.
-                    # print(sample.keys())
-                    # print(sample['source'].keys())
-                    # print(sample['target'].keys())
-                    # break
-                    sample['source'] = {k: v for k, v in sample['source'].items() if k in allowed_keys_source}
-                    sample['target'] = {k: v for k, v in sample['target'].items() if k in allowed_keys_target}
-                    to_extend.append(sample)
-                dataset.extend(to_extend)
-        # dataset = list(filter(self._is_long_src_audio_tgt_text, dataset))
-        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=32)
+                    jsonlline = json.loads(line)
+                    ## Now we need to make it consistent for jsonlline["source"] and jsonlline["target"]
+                    jsonlline["source"] = {key: value for key, value in jsonlline["source"].items() if key in allowed_keys}
+                    jsonlline["target"] = {key: value for key, value in jsonlline["target"].items() if key in allowed_keys}
+                    ## Make id as string
+                    jsonlline["source"]["id"] = str(jsonlline["source"]["id"])
+                    jsonlline["target"]["id"] = str(jsonlline["target"]["id"])
+                    alljsonlines.append(jsonlline)
+                dataset.extend(alljsonlines)
+        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
         if self.mode == "test":
             dataset = dataset.shuffle()
         return dataset
