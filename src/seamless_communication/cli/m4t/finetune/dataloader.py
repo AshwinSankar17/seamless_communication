@@ -338,21 +338,25 @@ class UnitYDataLoader:
 
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []
-        allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
+        src_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
+        tgt_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
         for dataset_manifest_path in dataset_manifest_paths:
             alljsonlines = []
             with open(dataset_manifest_path) as fp_in:
                 for line in fp_in:
                     jsonlline = json.loads(line)
                     ## Now we need to make it consistent for jsonlline["source"] and jsonlline["target"]
-                    jsonlline["source"] = {key: value for key, value in jsonlline["source"].items() if key in allowed_keys}
-                    jsonlline["target"] = {key: value for key, value in jsonlline["target"].items() if key in allowed_keys}
+                    jsonlline["source"] = {key: value for key, value in jsonlline["source"].items() if key in src_allowed_keys}
+                    jsonlline["target"] = {key: value for key, value in jsonlline["target"].items() if key in tgt_allowed_keys}
                     ## Make id as string
                     jsonlline["source"]["id"] = str(jsonlline["source"]["id"])
                     jsonlline["target"]["id"] = str(jsonlline["target"]["id"])
                     alljsonlines.append(jsonlline)
-                dataset.extend(alljsonlines)
-        dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
+                # dataset.extend(alljsonlines)
+                ds = Dataset.from_list(alljsonlines).filter(self._is_long_src_audio_tgt_text, num_proc=64)
+                dataset.append(ds)
+        dataset = concatenate_datasets(dataset)
+        # dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
         if self.mode == "test":
             dataset = dataset.shuffle()
         return dataset
