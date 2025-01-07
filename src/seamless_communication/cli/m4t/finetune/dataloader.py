@@ -14,7 +14,7 @@ import random
 import numpy as np
 import torch
 import torchaudio
-from datasets import Dataset, load_dataset, concatenate_datasets
+from datasets import Dataset, load_from_disk, concatenate_datasets
 from datasets.distributed import split_dataset_by_node
 from fairseq2.data.text import TextTokenEncoder
 from fairseq2.models.nllb import NllbTokenizer
@@ -22,7 +22,8 @@ from fairseq2.data.audio import WaveformToFbankConverter
 from torch import Tensor
 from torch.nn.functional import pad as pad_tensor
 from torch.utils.data import DataLoader
-from torchdata.stateful_dataloader import StatefulDataLoader
+from pathlib import Path
+# from torchdata.stateful_dataloader import StatefulDataLoader
 
 from seamless_communication.datasets.datatypes import LangPairSample
 from seamless_communication.models.unity.unit_tokenizer import (
@@ -339,22 +340,27 @@ class UnitYDataLoader:
     def _load_manifest(self, dataset_manifest_paths: List[str]) -> Dataset:
         dataset = []
         src_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
-        tgt_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
+        tgt_allowed_keys = ['id', 'text', 'lang']
         for dataset_manifest_path in dataset_manifest_paths:
-            alljsonlines = []
-            with open(dataset_manifest_path) as fp_in:
-                for line in fp_in:
-                    jsonlline = json.loads(line)
-                    ## Now we need to make it consistent for jsonlline["source"] and jsonlline["target"]
-                    jsonlline["source"] = {key: value for key, value in jsonlline["source"].items() if key in src_allowed_keys}
-                    jsonlline["target"] = {key: value for key, value in jsonlline["target"].items() if key in tgt_allowed_keys}
-                    ## Make id as string
-                    jsonlline["source"]["id"] = str(jsonlline["source"]["id"])
-                    jsonlline["target"]["id"] = str(jsonlline["target"]["id"])
-                    alljsonlines.append(jsonlline)
-                # dataset.extend(alljsonlines)
-                ds = Dataset.from_list(alljsonlines).filter(self._is_long_src_audio_tgt_text, num_proc=64)
-                dataset.append(ds)
+            precompiled_path = Path(dataset_manifest_path).parent / f"precompiled/{self.mode}"
+            if not precompiled_path.exists():
+                alljsonlines = []
+                with open(dataset_manifest_path) as fp_in:
+                    for line in fp_in:
+                        jsonlline = json.loads(line)
+                        ## Now we need to make it consistent for jsonlline["source"] and jsonlline["target"]
+                        jsonlline["source"] = {key: value for key, value in jsonlline["source"].items() if key in src_allowed_keys}
+                        jsonlline["target"] = {key: value for key, value in jsonlline["target"].items() if key in tgt_allowed_keys}
+                        ## Make id as string
+                        jsonlline["source"]["id"] = str(jsonlline["source"]["id"])
+                        jsonlline["target"]["id"] = str(jsonlline["target"]["id"])
+                        alljsonlines.append(jsonlline)
+                    # dataset.extend(alljsonlines)
+                    ds = Dataset.from_list(alljsonlines).filter(self._is_long_src_audio_tgt_text, num_proc=64)
+                    ds.save_to_disk(precompiled_path, max_shard_size="1GB")
+                    del ds # free up memory
+            ds = load_from_disk(precompiled_path)
+            dataset.append(ds)
         dataset = concatenate_datasets(dataset)
         # dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
         if self.mode == "test":
