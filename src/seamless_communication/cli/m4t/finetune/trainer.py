@@ -72,6 +72,9 @@ class FinetuneParams:
 
     log_steps: int = 10
     """ Log inner loss after each `log_steps` training steps"""
+    
+    gradient_accumulation_steps: int = 8
+    """ Log inner loss after each `log_steps` training steps"""
 
     eval_steps: int = 50
     """ Get eval loss after each `eval_steps` training steps """
@@ -395,6 +398,7 @@ class UnitYFinetune:
             return
         logger.info(f"Evaluation Step {self.update_idx // self.params.eval_steps}...")
         loss_hist = LossCollector(device=self.params.device)
+        # loss_hist = []
         self.model.eval()
         for batch in self.eval_data_loader.data_loader:
             if n_batches == 0:
@@ -406,8 +410,12 @@ class UnitYFinetune:
                 logger.warning("Eval batch loss value is NaN, skipping")
                 continue
             del batch  # force memory release
+            # loss_hist.append(loss.item())
             loss_hist.update(1, loss.item())
             n_batches -= 1
+        # eval_loss = torch.tensor(loss_hist).to(loss).mean()
+        # del loss_hist
+        # dist.all_reduce(eval_loss, op=dist.ReduceOp.AVG)
         eval_loss = loss_hist.reduce()
         self._update_eval_stats(eval_loss)
 
@@ -430,7 +438,7 @@ class UnitYFinetune:
     def _train_step(self, batch: List[dataloader.MultimodalSeqsBatch]) -> None:
         """Run one train step"""
         self.model.train()
-        self.optimizer.zero_grad()
+        # self.optimizer.zero_grad()
         with torch.autocast(device_type=self.params.device.type, dtype=self.params.float_dtype):
             tokens, units = self.model(batch)
         
@@ -439,15 +447,17 @@ class UnitYFinetune:
             logger.error(batch.speech_to_text)
             raise RuntimeError("Train loss is NaN! Something is wrong in the model!")
         
-        self.grad_scaler.scale(loss).backward()
-        self.grad_scaler.step(self.optimizer)
-        self.grad_scaler.update()
-        self.lr_scheduler.step()
+        # self.grad_scaler.scale(loss).backward()
+        # self.grad_scaler.step(self.optimizer)
+        # self.grad_scaler.update()
+        # self.lr_scheduler.step()
         
         assert batch.speech_to_text.src_tokens is not None
         self.train_loss_hist.update(1, loss.item())
+        # dist.all_reduce(loss, op=dist.ReduceOp.AVG)
         self._train_step_log()
         self.update_idx += 1
+        return loss
 
     def _save_model(self, batch_idx) -> None:
         logger.info("Saving model")
@@ -515,9 +525,17 @@ class UnitYFinetune:
                         batch_idx += 1
                         continue
                     # Run batch through train step
-                    self._train_step(train_batch)
+                    loss = self._train_step(train_batch)
+                    self.grad_scaler.scale(loss / self.params.gradient_accumulation_steps).backward()
+                    
                     batch_idx += 1
                     step_idx += 1
+                    if step_idx % self.params.gradient_accumulation_steps == 0:
+                        self.grad_scaler.step(self.optimizer)
+                        self.grad_scaler.update()
+                        self.lr_scheduler.step()
+                        self.optimizer.zero_grad()
+
                     if step_idx % self.params.save_freq == 0:
                         self._save_model_every_x_steps(step_idx, batch_idx)
                     # Perform eval if its time to eval

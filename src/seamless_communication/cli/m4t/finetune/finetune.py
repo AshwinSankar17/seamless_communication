@@ -130,6 +130,12 @@ def init_parser() -> argparse.ArgumentParser:
         help=("Log inner loss after each `log_steps` training steps"),
     )
     parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=10,
+        help=("How many steps to accumulate gradients for before stepping optimizer"),
+    )
+    parser.add_argument(
         "--max_src_tokens",
         type=int,
         default=7000,
@@ -225,6 +231,7 @@ def main() -> None:
         warmup_steps=args.warmup_steps,
         eval_steps=args.eval_steps,
         log_steps=args.log_steps,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         run_name=args.wandb_run_name,
         entity=args.wandb_entity,
     )
