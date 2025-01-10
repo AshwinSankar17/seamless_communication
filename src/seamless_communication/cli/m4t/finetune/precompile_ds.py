@@ -115,14 +115,14 @@ for ds_path in train_manifest_paths:
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=128
+            num_proc=64
         )
-        ds = ds.map(_get_source_fbank, num_proc=128)
-        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=128)
+        ds = ds.map(_get_source_fbank, num_proc=64)
+        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
         ds.set_format('torch', columns=['fbank', 'target_tokens'], output_all_columns=True)
         ds = ds.filter(
             lambda example: filter_fbanks(example['fbank']),
-            num_proc=128
+            num_proc=64
         )
         # print(ds[0])
         # exit()
@@ -151,14 +151,14 @@ for ds_path in test_manifest_paths:
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=128
+            num_proc=64
         )
-        ds = ds.map(_get_source_fbank, num_proc=128)
-        ds = ds.map(lambda x: _get_tokenized_target(x, text_tokenizer, text_encoders_per_lang), num_proc=128)
+        ds = ds.map(_get_source_fbank, num_proc=64)
+        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
         ds.set_format('torch', columns=['fbank', 'target_tokens'], output_all_columns=True)
         ds = ds.filter(
             lambda example: filter_fbanks(example['fbank']),
-            num_proc=128
+            num_proc=64
         )
         # print(ds[0])
         ds.save_to_disk(Path(ds_path).parent / "precompiled/test", max_shard_size="1GB")
