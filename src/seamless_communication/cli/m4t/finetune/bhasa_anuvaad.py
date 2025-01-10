@@ -663,6 +663,7 @@ def main() -> None:
             download_fleurs(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
         elif name == "all":
             download_mkb(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
+            download_nptel(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
             download_ivst(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
             download_word_project(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)
             download_ugce(args.direction, args.huggingface_token, args.save_dir, args.hf_cache_dir)

@@ -12,6 +12,7 @@ import random
 import numpy as np
 
 import torch
+import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
 
 from seamless_communication.cli.m4t.finetune import dataloader, dist_utils, trainer
@@ -132,7 +133,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
-        default=10,
+        default=8,
         help=("How many steps to accumulate gradients for before stepping optimizer"),
     )
     parser.add_argument(
@@ -211,7 +212,12 @@ def main() -> None:
     dist_utils.init_distributed([logger, trainer.logger])
     # float_dtype = torch.float16 if torch.device(args.device).type != "cpu" else torch.bfloat16
     float_dtype = torch.bfloat16
-    
+    if dist_utils.get_rank() == 0:
+        text_tokenizer = load_unity_text_tokenizer(args.model_name)
+        unit_tokenizer = load_unity_unit_tokenizer(args.model_name)
+        del text_tokenizer
+        del unit_tokenizer
+    dist.barrier()
     text_tokenizer = load_unity_text_tokenizer(args.model_name)
     unit_tokenizer = load_unity_unit_tokenizer(args.model_name)
     
@@ -238,6 +244,10 @@ def main() -> None:
     
     logger.info(f"Finetune Params: {finetune_params}")
     
+    if dist_utils.get_rank() == 0:
+        model = load_unity_model(args.model_name, device=torch.device("cpu"), dtype=torch.float32)
+        del model
+    dist.barrier()
     model = load_unity_model(args.model_name, device=torch.device("cpu"), dtype=torch.float32)
     if args.load_model_from:
         if os.path.exists(args.load_model_from):

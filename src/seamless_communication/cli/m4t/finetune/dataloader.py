@@ -122,7 +122,7 @@ class UnitYDataLoader:
             "channel_last": True,
             "standardize": True,
             "device": torch.device("cpu"),
-            "dtype": torch.float32, #self.batching_config.float_dtype,
+            "dtype": torch.float32,
         }
         if isinstance(dataset_manifest_path, str):
             dataset_manifest_path = [dataset_manifest_path]
@@ -245,7 +245,7 @@ class UnitYDataLoader:
             return False
 
     def _drop_overflow_samples(
-        self, samples_with_fbanks: List[Tuple[LangPairSample, torch.Tensor]]
+        self, samples_with_fbanks: List[Tuple[LangPairSample, torch.Tensor, torch.Tensor]]
     ) -> List[Tuple[LangPairSample, torch.Tensor]]:
         # filter by src_tokens length (reverse)
         samples_with_fbanks = sorted(
@@ -256,8 +256,22 @@ class UnitYDataLoader:
         if max_samples_for_batch < len(samples_with_fbanks):
             samples_with_fbanks = samples_with_fbanks[:max_samples_for_batch]
         return samples_with_fbanks
+    
+    # def _drop_overflow_samples(
+    #     self, samples_with_fbanks: List[Tuple[LangPairSample, torch.Tensor]]
+    # ) -> List[Tuple[LangPairSample, torch.Tensor]]:
+    #     # filter by src_tokens length (reverse)
+    #     samples_with_fbanks = sorted(
+    #         samples_with_fbanks, key=lambda sb: -sb[1].shape[0]
+    #     )
+    #     bwd = samples_with_fbanks[0][1].shape[0]
+    #     max_samples_for_batch = max(1, self.max_src_tokens_per_batch // bwd)
+    #     if max_samples_for_batch < len(samples_with_fbanks):
+    #         samples_with_fbanks = samples_with_fbanks[:max_samples_for_batch]
+    #     return samples_with_fbanks
 
     def _prepare_batch(self, raw_samples: List[Dict[str, Any]]) -> MultimodalSeqsBatch:
+        # print(raw_samples[0].keys())
         samples = [LangPairSample.from_json(sample) for sample in raw_samples]
         # input speech
         
@@ -268,21 +282,22 @@ class UnitYDataLoader:
         # samples = (
         #     filtered_samples if filtered_samples else [samples[0]]
         # )  # keep at least one sample
-        with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
-        #  - filter NaNs in fbanks
-        filtered_orig = [
-            (sample, fbank)
-            for sample, fbank in with_fbanks
-            if not fbank.isnan().any().item()
+        # with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
+        # #  - filter NaNs in fbanks
+        # filtered = [
+        #     (sample, fbank)
+        #     for sample, fbank in with_fbanks
+        #     if not fbank.isnan().any().item()
+        # ]
+        filtered = [
+            (samples[i], raw_samples[i]['fbank'], raw_samples[i]['target_tokens']) for i in range(len(raw_samples))
         ]
-        # try:
-        filtered = self._drop_overflow_samples(filtered_orig)
-        # except:
-        #     logger.exception(f"Failed to drop overflow samples")
-        #     filtered = [filtered_orig[0]]
+        # print(filtered[0])
+        filtered = self._drop_overflow_samples(filtered)
 
-        samples = [sample for sample, _ in filtered]
-        src_tokens_list = [src_tokens for _, src_tokens in filtered]
+        samples = [sample for sample, *_ in filtered]
+        src_tokens_list = [src_tokens for _, src_tokens, _ in filtered]
+        text_tokens_list = [text_tokens for *_, text_tokens in filtered]
         assert len(samples) > 0, "No Samples in batch"
         src_tokens = self._batch_tensors(
             src_tokens_list, pad_value=self.batching_config.fbank_feats_pad_idx
@@ -292,9 +307,12 @@ class UnitYDataLoader:
         )
         
         # output text
-        text_tokens_list = [
-            self._get_tokenized_target_text(sample) for sample in samples
-        ]
+        # text_tokens_list = [
+        #     self._get_tokenized_target_text(sample) for sample in samples
+        # ]
+        # text_tokens_list = [
+        #     sample['target_tokens'] for sample in raw_samples
+        # ]
         text_pad_idx = self.text_tokenizer.vocab_info.pad_idx
         prev_outputs_tokens = self._batch_tensors(
             [tokens[:-1] for tokens in text_tokens_list], pad_value=text_pad_idx
