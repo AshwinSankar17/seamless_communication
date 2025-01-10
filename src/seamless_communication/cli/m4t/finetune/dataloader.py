@@ -122,7 +122,7 @@ class UnitYDataLoader:
             "channel_last": True,
             "standardize": True,
             "device": torch.device("cpu"),
-            "dtype": self.batching_config.float_dtype,
+            "dtype": torch.float32, #self.batching_config.float_dtype,
         }
         if isinstance(dataset_manifest_path, str):
             dataset_manifest_path = [dataset_manifest_path]
@@ -231,14 +231,15 @@ class UnitYDataLoader:
             padded_tensors.append(pad_tensor(tensor, padding, "constant", pad_value))
         return torch.stack([tensor for tensor in padded_tensors], dim=0)
 
-    def _is_long_src_audio_tgt_text(self, sample: Dict[str, Any]) -> bool:
+    def _is_long_src_audio_tgt_text(self, sample: Dict[str, Any], min_audio_length: float=0.3) -> bool:
         # HACK:: causes errored audios to be excluded but this is difficult to follow
         try:
             sample = LangPairSample.from_json(sample)
             wav, sample_rate = torchaudio.load(sample.source.audio_local_path)
             length_s: float = max(wav.shape) / sample_rate
             tokens = self._get_tokenized_target_text(sample)
-            return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
+            return not (length_s < min_audio_length or length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
+            # return not (length_s > self.batching_config.max_audio_length_sec or tokens.shape[-1] >= 4096)
         except:
             logger.exception(f"Failed to load sample path: {sample.source.audio_local_path}")
             return False
@@ -269,12 +270,16 @@ class UnitYDataLoader:
         # )  # keep at least one sample
         with_fbanks = [(sample, self._get_source_fbank(sample)) for sample in samples]
         #  - filter NaNs in fbanks
-        filtered = [
+        filtered_orig = [
             (sample, fbank)
             for sample, fbank in with_fbanks
             if not fbank.isnan().any().item()
         ]
-        filtered = self._drop_overflow_samples(filtered)
+        # try:
+        filtered = self._drop_overflow_samples(filtered_orig)
+        # except:
+        #     logger.exception(f"Failed to drop overflow samples")
+        #     filtered = [filtered_orig[0]]
 
         samples = [sample for sample, _ in filtered]
         src_tokens_list = [src_tokens for _, src_tokens in filtered]

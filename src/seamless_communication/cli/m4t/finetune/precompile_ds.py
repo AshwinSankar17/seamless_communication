@@ -8,8 +8,7 @@ from seamless_communication.datasets.datatypes import LangPairSample
 
 from seamless_communication.models.unity import load_unity_text_tokenizer
 
-ds_src_path = "/raid/data/audioteam/BhasaAnuvaad"
-ds_save_path = "/raid/data/audioteam/BhasaAnuvaad/precompiled"
+ds_src_path = "/home/MLTL-RESEARCH/draj/draj/data/parallel/speechtranslation/seamless_communication/src/seamless_communication/cli/m4t/finetune/data/BhasaAnuvaad"
 
 src_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
 tgt_allowed_keys = ['id', 'text', 'lang']
@@ -66,7 +65,7 @@ for ds_path in train_manifest_paths:
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=128
+            num_proc=64
         )
         ds.save_to_disk(Path(ds_path).parent / "precompiled/train", max_shard_size="1GB")
 #         train_ds.append(ds)
@@ -92,7 +91,7 @@ for ds_path in test_manifest_paths:
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=128
+            num_proc=64
         )
         ds.save_to_disk(Path(ds_path).parent / "precompiled/test", max_shard_size="1GB")
 #         test_ds.append(ds)
