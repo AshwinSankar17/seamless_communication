@@ -35,6 +35,19 @@ text_encoders_per_lang = {}
 # print(train_manifest_paths[0])
 # exit()
 
+_fbank_extract_params = {
+    "num_mel_bins": 80,
+    "waveform_scale": 32768,
+    "channel_last": True,
+    "standardize": True,
+    "device": torch.device("cpu"),
+    "dtype": torch.float32,
+}
+feature_extractor = WaveformToFbankConverter(**_fbank_extract_params)
+
+# print(train_manifest_paths[0])
+# exit()
+
 def _get_tokenized_target(text_tokenizer, text_encoders_per_lang, json_sample):
     """Expected sequence is [<eos>, <lang_tok> , ..text tokens.., <eos>]"""
     sample = LangPairSample.from_json(json_sample)
@@ -61,16 +74,8 @@ def _get_tokenized_target_text(text_tokenizer, text_encoders_per_lang, sample):
     tokens = torch.concat([tokens, torch.LongTensor([eos_idx])])
     return tokens
 
-def _get_source_fbank(sample):
+def _get_source_fbank(sample, feature_extractor):
     # print(sample)
-    _fbank_extract_params = {
-        "num_mel_bins": 80,
-        "waveform_scale": 32768,
-        "channel_last": True,
-        "standardize": True,
-        "device": torch.device("cpu"),
-        "dtype": torch.float32,
-    }
     SAMPLE_RATE = 16_000
     wav, sample_rate = torchaudio.load(sample['source']['audio_local_path'])
     assert (
@@ -81,13 +86,29 @@ def _get_source_fbank(sample):
         wav = wav.unsqueeze(-1)
     elif wav.shape[0] <= 2:  # channel is first, should be second
         wav = wav.transpose(0, 1)
-    sample["fbank"] = WaveformToFbankConverter(**_fbank_extract_params)(  # type: ignore
+    sample["fbank"] = feature_extractor(  # type: ignore
         {
             "waveform": wav.to(_fbank_extract_params["device"]),
             "sample_rate": SAMPLE_RATE,
         }
     )["fbank"]
+    # sample["fbank"] = WaveformToFbankConverter(**_fbank_extract_params)(  # type: ignore
+    #     {
+    #         "waveform": wav.to(_fbank_extract_params["device"]),
+    #         "sample_rate": SAMPLE_RATE,
+    #     }
+    # )["fbank"]
     return sample
+
+def collect_fbank_and_tokens(sample, text_tokenizer, text_encoders_per_lang, feature_extractor):
+    try:
+        sample = _get_source_fbank(sample, feature_extractor)
+        sample = _get_tokenized_target(text_tokenizer, text_encoders_per_lang, sample)
+    except Exception as e:
+        print(f"Failed to load sample path: {sample['source']['audio_local_path']}; {e}")
+    finally:
+        return sample
+
 
 def _is_long_src_audio_tgt_text(sample, text_tokenizer, text_encoders_per_lang, max_audio_length_sec, min_audio_length=0.3):
     # HACK:: causes errored audios to be excluded but this is difficult to follow
@@ -133,9 +154,9 @@ with open(manifest_path) as fp_in:
             alljsonlines.append(jsonlline)
         except:
             continue
-ds = Dataset.from_list(alljsonlines).filter(simple_text_len_filter, num_proc=64)
-ds = ds.map(_get_source_fbank, num_proc=64)
-ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
+ds = Dataset.from_list(alljsonlines).filter(simple_text_len_filter, num_proc=16)
+ds = ds.map(lambda sample: collect_fbank_and_tokens(sample, text_tokenizer, text_encoders_per_lang, feature_extractor), num_proc=16)
+# ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
 ds.set_format('torch', columns=['fbank', 'target_tokens'], output_all_columns=True)
-ds = ds.filter(collated_filter, num_proc=64)
+ds = ds.filter(collated_filter, num_proc=16)
 ds.save_to_disk(Path(manifest_path).parent / "precompiled/train", max_shard_size="1GB")
