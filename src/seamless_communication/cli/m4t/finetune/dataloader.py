@@ -363,9 +363,11 @@ class UnitYDataLoader:
         dataset = []
         src_allowed_keys = ['id', 'text', 'lang', 'audio_local_path', 'sampling_rate']
         tgt_allowed_keys = ['id', 'text', 'lang']
+        # dataset_manifest_paths = dataset_manifest_paths[:4]
         for dataset_manifest_path in dataset_manifest_paths:
             precompiled_path = Path(dataset_manifest_path).parent / f"precompiled/{self.mode}"
             if not precompiled_path.exists():
+                # continue
                 alljsonlines = []
                 with open(dataset_manifest_path) as fp_in:
                     for line in fp_in:
@@ -381,7 +383,7 @@ class UnitYDataLoader:
                     ds = Dataset.from_list(alljsonlines).filter(self._is_long_src_audio_tgt_text, num_proc=64)
                     ds.save_to_disk(precompiled_path, max_shard_size="1GB")
                     del ds # free up memory
-            ds = load_from_disk(precompiled_path)
+            ds = load_from_disk(precompiled_path).filter(lambda x: x['fbank'].shape[0] < 1024, num_proc=32)
             dataset.append(ds)
         dataset = concatenate_datasets(dataset)
         # dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
