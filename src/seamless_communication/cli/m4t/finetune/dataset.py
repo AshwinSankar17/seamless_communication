@@ -91,6 +91,11 @@ UNITY_TO_FLEURS_LANG_MAPPING = {
     "vie": "vi_vn",
     "yor": "yo_ng",
     "zul": "zu_za",
+    "mar": "mr_in",
+    "mal": "ml_in",
+    "guj": "gu_in",
+    "ory": "or_in",
+    "nep": "ne_np",
 }
 
 

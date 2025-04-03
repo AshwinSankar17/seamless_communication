@@ -55,6 +55,11 @@ def init_parser() -> argparse.ArgumentParser:
         help="Base model name (`seamlessM4T_medium`, `seamlessM4T_large`)",
     )
     parser.add_argument(
+        "--is_v1",
+        action="store_true",
+        help="Use this flag if the seamless model is v1",
+    )
+    parser.add_argument(
         "--save_model_to",
         type=Path,
         required=True,
@@ -135,6 +140,11 @@ def init_parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help=("How many steps to accumulate gradients for before stepping optimizer"),
+    )
+    parser.add_argument(
+        "--adam_8bit",
+        action="store_true",
+        help=("Use 8-bit Adam optimizer for training"),
     )
     parser.add_argument(
         "--max_src_tokens",
@@ -238,6 +248,7 @@ def main() -> None:
         eval_steps=args.eval_steps,
         log_steps=args.log_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        adam_8bit=args.adam_8bit,
         run_name=args.wandb_run_name,
         entity=args.wandb_entity,
     )
@@ -281,7 +292,8 @@ def main() -> None:
         ),
         mode="train",
         dataset_manifest_path=args.train_dataset,
-        max_src_tokens_per_batch=args.max_src_tokens)
+        max_src_tokens_per_batch=args.max_src_tokens,
+        is_v1=args.is_v1)
     
     eval_dataloader = dataloader.UnitYDataLoader(
         text_tokenizer=text_tokenizer,
@@ -294,7 +306,8 @@ def main() -> None:
             float_dtype=finetune_params.float_dtype,
         ),
         mode="test",
-        dataset_manifest_path=args.eval_dataset)
+        dataset_manifest_path=args.eval_dataset,
+        is_v1=args.is_v1)
     
     finetune = trainer.UnitYFinetune(
         model=model,

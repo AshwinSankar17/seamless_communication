@@ -5,6 +5,9 @@ from glob import glob
 from pathlib import Path
 from datasets import Dataset
 
+import multiprocessing
+multiprocessing.set_start_method('spawn', force=True)
+
 from fairseq2.data.audio import WaveformToFbankConverter
 
 from seamless_communication.datasets.datatypes import LangPairSample
@@ -94,10 +97,12 @@ def filter_fbanks(sample):
     return not sample.isnan().any().item()
 
 train_ds = []
+max_entries = 200000
 for ds_path in train_manifest_paths:
     print(ds_path)
     alljsonlines = []
     with open(ds_path) as fp_in:
+        curr_entry = 0
         for line in fp_in:
             try:
                 jsonlline = json.loads(line)
@@ -108,20 +113,24 @@ for ds_path in train_manifest_paths:
                 jsonlline["source"]["id"] = str(jsonlline["source"]["id"])
                 jsonlline["target"]["id"] = str(jsonlline["target"]["id"])
                 alljsonlines.append(jsonlline)
+                curr_entry += 1
+                if curr_entry >= max_entries:
+                    print(f"Reached max entries: {max_entries}, breaking")
+                    break
             except:
                 continue
         ds = Dataset.from_list(alljsonlines).filter(
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=64
+            num_proc=32
         )
-        ds = ds.map(_get_source_fbank, num_proc=64)
-        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
+        ds = ds.map(_get_source_fbank, num_proc=32)
+        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=32)
         ds.set_format('torch', columns=['fbank', 'target_tokens'], output_all_columns=True)
         ds = ds.filter(
             lambda example: filter_fbanks(example['fbank']),
-            num_proc=64
+            num_proc=32
         )
         # print(ds[0])
         # exit()
@@ -150,14 +159,14 @@ for ds_path in test_manifest_paths:
                 lambda x: _is_long_src_audio_tgt_text(
                 x, text_tokenizer, text_encoders_per_lang, 15.0
             ), 
-            num_proc=64
+            num_proc=32
         )
-        ds = ds.map(_get_source_fbank, num_proc=64)
-        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=64)
+        ds = ds.map(_get_source_fbank, num_proc=32)
+        ds = ds.map(lambda x: _get_tokenized_target(text_tokenizer, text_encoders_per_lang, x), num_proc=32)
         ds.set_format('torch', columns=['fbank', 'target_tokens'], output_all_columns=True)
         ds = ds.filter(
             lambda example: filter_fbanks(example['fbank']),
-            num_proc=64
+            num_proc=32
         )
         # print(ds[0])
         ds.save_to_disk(Path(ds_path).parent / "precompiled/test", max_shard_size="1GB")

@@ -108,6 +108,7 @@ class UnitYDataLoader:
         dataset_manifest_path: str | List[str],
         batching_config: BatchingConfig,
         max_src_tokens_per_batch: int = 100000,
+        is_v1: bool = False,
         mode="train",
     ):
         self.text_tokenizer = text_tokenizer
@@ -126,6 +127,7 @@ class UnitYDataLoader:
         }
         if isinstance(dataset_manifest_path, str):
             dataset_manifest_path = [dataset_manifest_path]
+        self.is_v1 = is_v1
         self.dataset = self._load_manifest(dataset_manifest_path)
         self.max_src_tokens_per_batch = max_src_tokens_per_batch
         subset = split_dataset_by_node(
@@ -367,6 +369,7 @@ class UnitYDataLoader:
         for dataset_manifest_path in dataset_manifest_paths:
             precompiled_path = Path(dataset_manifest_path).parent / f"precompiled/{self.mode}"
             if not precompiled_path.exists():
+                print(f"Precompiled dataset not found at {precompiled_path}. Compiling...")
                 alljsonlines = []
                 with open(dataset_manifest_path) as fp_in:
                     for line in fp_in:
@@ -382,9 +385,14 @@ class UnitYDataLoader:
                     ds = Dataset.from_list(alljsonlines).filter(self._is_long_src_audio_tgt_text, num_proc=64)
                     ds.save_to_disk(precompiled_path, max_shard_size="1GB")
                     del ds # free up memory
+            else:
+                print(f"Precompiled dataset found at {precompiled_path}. Loading...")
             ds = load_from_disk(precompiled_path)
             dataset.append(ds)
         dataset = concatenate_datasets(dataset)
+        if self.is_v1:
+            print("Filtering long audio samples for the V1 model")
+            dataset = dataset.filter(lambda x: x['fbank'].shape[0] < 1024) ## For V1
         # dataset = Dataset.from_list(dataset).filter(self._is_long_src_audio_tgt_text, num_proc=64)
         if self.mode == "test":
             dataset = dataset.shuffle()
